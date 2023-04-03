@@ -32,7 +32,7 @@
                 </div>
                 <div class="form-row">
                     <label for="field1"><fmt:message key="console.directory.user.common.label.email"/></label>
-                    <span class="form-input"><form:input path="email" cssErrorClass="form-input-error" /></span>
+                    <span class="form-input"><form:input path="email" cssErrorClass="form-input-error" autocomplete="off"/></span>
                 </div>
                 <div class="form-row">
                     <label for="field1"><fmt:message key="console.directory.user.common.label.password"/></label>
@@ -121,7 +121,7 @@
                             </tr>
                             <c:if test="${!empty employments}">
                                 <c:forEach items="${employments}" var="e" >
-                                    <c:if test="${!empty e.departmentId}">
+                                    <c:if test="${!empty e.organizationId || !empty e.departmentId}">
                                         <tr class="row">
                                             <td class="delete">
                                                 <a class="delete"><i class="fas fa-minus-circle"></i><a>
@@ -184,7 +184,7 @@
                                                     <a class="delete"><i class="fas fa-minus-circle"></i><a>
                                                 </td>
                                                 <td class="org">
-                                                    <select name="employeeOrganization">
+                                                    <select name="employeeGradeOrganization">
                                                         <option value=""><fmt:message key="console.directory.employment.common.label.organization"/></option>
                                                         <c:forEach items="${organizations}" var="org">
                                                             <option value="<c:out value="${org.id}"/>" <c:if test="${org.id eq e.organizationId}">selected</c:if>><c:out value="${org.name}"/></option>
@@ -311,9 +311,11 @@
                 if (dvalue === undefined || dvalue === null) {
                     dvalue = "";
                 }
-                $(field).find("option:not(:eq(1))").remove();
+                $(field).find("option:not([value=''])").remove();
                 for(var i=0; i < options.length; i++){
-                    $(field).append('<option value="' + UI.escapeHTML(options[i].id) + '">' + UI.escapeHTML(options[i].name) + '</option>');
+                    if (options[i].id !== "") {
+                        $(field).append('<option value="' + UI.escapeHTML(options[i].id) + '">' + UI.escapeHTML(options[i].name) + '</option>');
+                    }
                 }
                 $(field).val(dvalue);
             }

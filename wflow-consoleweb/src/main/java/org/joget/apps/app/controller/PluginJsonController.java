@@ -7,6 +7,7 @@ import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,7 +117,7 @@ public class PluginJsonController {
 
     @RequestMapping("/json/plugin/list")
     public void pluginList(Writer writer, @RequestParam(value = "className", required = false) String className, @RequestParam(value = "name", required = false) String filter, @RequestParam(value = "start", required = false) Integer start, @RequestParam(value = "rows", required = false) Integer rows) throws JSONException {
-        Collection<Plugin> pluginList = null;
+        List<Plugin> pluginList = null;
 
         try {
             if (className != null && !className.trim().isEmpty()) {
@@ -126,52 +127,71 @@ public class PluginJsonController {
                 } else {
                     clazz = Class.forName(className);
                 }
-                pluginList = pluginManager.list(clazz);
+                pluginList = new ArrayList<Plugin>(pluginManager.list(clazz));
             } else {
-                pluginList = pluginManager.list();
+                pluginList = new ArrayList<Plugin>(pluginManager.list());
             }
 
+            try {
+                //sort with plugin label
+                Collections.sort(pluginList, new Comparator<Plugin>() {
+
+                    public int compare(Plugin o1, Plugin o2) {
+                        if (o1.getI18nLabel() == null || o1.getI18nLabel().isEmpty() || o2.getI18nLabel() == null || o2.getI18nLabel().isEmpty()) {
+                            return 0;
+                        }
+                        return o1.getI18nLabel().compareTo(o2.getI18nLabel());
+                    }
+                });
+            } catch (Exception ex) {
+                //exception because of plugin uninstalled in other request, just ignore it
+            }
+            
             JSONObject jsonObject = new JSONObject();
             int counter = 0;
             
             Map<String, String> pluginType = PluginManager.getPluginType();
             for (Plugin plugin : pluginList) {
-                if (plugin.getI18nLabel() == null || plugin.getI18nLabel().isEmpty()) {
-                    continue;
-                }
-                if (filter != null && !filter.isEmpty() && !plugin.getI18nLabel().toLowerCase().contains(filter.toLowerCase())) {
-                    continue;
-                }
-                
-                if (counter >= start && counter < start + rows) {
-                    Map data = new HashMap();
-                    data.put("id", ClassUtils.getUserClass(plugin).getName());
-                    data.put("name", plugin.getI18nLabel());
-                    data.put("description", plugin.getI18nDescription());
-                    data.put("version", plugin.getVersion());
-                    
-                    String type = "";
-                    for (String c : pluginType.keySet()) {
-                        Class clazz;
-                        if (pluginManager.getCustomPluginInterface(c) != null) {
-                            clazz = pluginManager.getCustomPluginInterface(c).getClassObj();
-                        } else {
-                            clazz = Class.forName(c);
-                        }
-                        
-                        if (clazz.isInstance(plugin)) {
-                            if (!type.isEmpty()) {
-                                type += ", ";
-                            }
-                            type += pluginType.get(c);
-                        }
+                try {
+                    if (plugin.getI18nLabel() == null || plugin.getI18nLabel().isEmpty()) {
+                        continue;
                     }
-                    data.put("plugintype", type);
-                    data.put("uninstallable", (pluginManager.isOsgi(data.get("id").toString())) ? "<div class=\"tick\"></div>" : "");
-                    
-                    jsonObject.accumulate("data", data);
+                    if (filter != null && !filter.isEmpty() && !plugin.getI18nLabel().toLowerCase().contains(filter.toLowerCase())) {
+                        continue;
+                    }
+
+                    if (counter >= start && counter < start + rows) {
+                        Map data = new HashMap();
+                        data.put("id", ClassUtils.getUserClass(plugin).getName());
+                        data.put("name", plugin.getI18nLabel());
+                        data.put("description", plugin.getI18nDescription());
+                        data.put("version", plugin.getVersion());
+
+                        String type = "";
+                        for (String c : pluginType.keySet()) {
+                            Class clazz;
+                            if (pluginManager.getCustomPluginInterface(c) != null) {
+                                clazz = pluginManager.getCustomPluginInterface(c).getClassObj();
+                            } else {
+                                clazz = Class.forName(c);
+                            }
+
+                            if (clazz.isInstance(plugin)) {
+                                if (!type.isEmpty()) {
+                                    type += ", ";
+                                }
+                                type += pluginType.get(c);
+                            }
+                        }
+                        data.put("plugintype", type);
+                        data.put("uninstallable", (pluginManager.isOsgi(data.get("id").toString())) ? "<span class=\"tick\"></span>" : "");
+
+                        jsonObject.accumulate("data", data);
+                    }
+                    counter++;
+                } catch (Exception ex) {
+                    //exception because of plugin uninstalled in other request, just ignore it
                 }
-                counter++;
             }
 
             jsonObject.accumulate("total", counter);
@@ -184,7 +204,7 @@ public class PluginJsonController {
 
     @RequestMapping("/json/plugin/listOsgi")
     public void pluginListOsgi(Writer writer, @RequestParam(value = "className", required = false) String className, @RequestParam(value = "name", required = false) String filter, @RequestParam(value = "start", required = false) Integer start, @RequestParam(value = "rows", required = false) Integer rows) throws JSONException {
-        Collection<Plugin> pluginList = null;
+        List<Plugin> pluginList = null;
 
         try {
             if (className != null && !className.trim().isEmpty()) {
@@ -194,51 +214,70 @@ public class PluginJsonController {
                 } else {
                     clazz = Class.forName(className);
                 }
-                pluginList = pluginManager.listOsgiPlugin(clazz);
+                pluginList = new ArrayList<Plugin>(pluginManager.listOsgiPlugin(clazz));
             } else {
-                pluginList = pluginManager.listOsgiPlugin(null);
+                pluginList = new ArrayList<Plugin>(pluginManager.listOsgiPlugin(null));
             }
+        
+            try {
+                //sort with plugin label
+                Collections.sort(pluginList, new Comparator<Plugin>() {
 
+                    public int compare(Plugin o1, Plugin o2) {
+                        if (o1.getI18nLabel() == null || o1.getI18nLabel().isEmpty() || o2.getI18nLabel() == null || o2.getI18nLabel().isEmpty()) {
+                            return 0;
+                        }
+                        return o1.getI18nLabel().compareTo(o2.getI18nLabel());
+                    }
+                });
+            } catch (Exception ex) {
+                //exception because of plugin uninstalled in other request, just ignore it
+            }
+            
             JSONObject jsonObject = new JSONObject();
             int counter = 0;
 
             Map<String, String> pluginType = PluginManager.getPluginType();
             for (Plugin plugin : pluginList) {
-                if (plugin.getI18nLabel() == null || plugin.getI18nLabel().isEmpty()) {
-                    continue;
-                }
-                if (filter != null && !filter.isEmpty() && !plugin.getI18nLabel().toLowerCase().contains(filter.toLowerCase())) {
-                    continue;
-                }
-                
-                if (counter >= start && counter < start + rows) {
-                    Map data = new HashMap();
-                    data.put("id", ClassUtils.getUserClass(plugin).getName());
-                    data.put("name", plugin.getI18nLabel());
-                    data.put("description", plugin.getI18nDescription());
-                    data.put("version", plugin.getVersion());
-                    
-                    String type = "";
-                    for (String c : pluginType.keySet()) {
-                        Class clazz;
-                        if (pluginManager.getCustomPluginInterface(c) != null) {
-                            clazz = pluginManager.getCustomPluginInterface(c).getClassObj();
-                        } else {
-                            clazz = Class.forName(c);
-                        }
-                        if (clazz.isInstance(plugin)) {
-                            if (!type.isEmpty()) {
-                                type += ", ";
-                            }
-                            type += pluginType.get(c);
-                        }
+                try {
+                    if (plugin.getI18nLabel() == null || plugin.getI18nLabel().isEmpty()) {
+                        continue;
                     }
-                    data.put("plugintype", type);
-                    data.put("uninstallable", (pluginManager.isOsgi(data.get("id").toString())) ? "<div class=\"tick\"></div>" : "");
-                    
-                    jsonObject.accumulate("data", data);
+                    if (filter != null && !filter.isEmpty() && !plugin.getI18nLabel().toLowerCase().contains(filter.toLowerCase())) {
+                        continue;
+                    }
+
+                    if (counter >= start && counter < start + rows) {
+                        Map data = new HashMap();
+                        data.put("id", ClassUtils.getUserClass(plugin).getName());
+                        data.put("name", plugin.getI18nLabel());
+                        data.put("description", plugin.getI18nDescription());
+                        data.put("version", plugin.getVersion());
+
+                        String type = "";
+                        for (String c : pluginType.keySet()) {
+                            Class clazz;
+                            if (pluginManager.getCustomPluginInterface(c) != null) {
+                                clazz = pluginManager.getCustomPluginInterface(c).getClassObj();
+                            } else {
+                                clazz = Class.forName(c);
+                            }
+                            if (clazz.isInstance(plugin)) {
+                                if (!type.isEmpty()) {
+                                    type += ", ";
+                                }
+                                type += pluginType.get(c);
+                            }
+                        }
+                        data.put("plugintype", type);
+                        data.put("uninstallable", (pluginManager.isOsgi(data.get("id").toString())) ? "<span class=\"tick\"></span>" : "");
+
+                        jsonObject.accumulate("data", data);
+                    }
+                    counter++;
+                } catch (Exception ex) {
+                    //exception because of plugin uninstalled in other request, just ignore it
                 }
-                counter++;
             }
 
             jsonObject.accumulate("total", counter);

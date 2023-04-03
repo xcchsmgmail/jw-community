@@ -1142,18 +1142,26 @@ public class ConsoleWebController {
             }
             if (employeeDepartment != null) {
                 for (int i = 0; i < employeeDepartment.length; i++) {
-                    if (existingDepartments.contains(employeeDepartment[i])) {
-                        existingDepartments.remove(employeeDepartment[i]);
-                        existingOrgs.remove(employeeDeptOrganization[i]);
+                    if (employeeDepartment[i].isEmpty()) { //if department id is empty
+                        if (existingOrgs.contains(employeeDeptOrganization[i])) {
+                            existingOrgs.remove(employeeDeptOrganization[i]);
+                        } else if (!employeeDeptOrganization[i].isEmpty()) {
+                            employmentDao.assignUserToOrganization(u.getId(), employeeDeptOrganization[i]);
+                        }
                     } else {
-                        employmentDao.assignUserToDepartment(u.getId(), employeeDepartment[i]);
-                    }
-
-                    if ("true".equalsIgnoreCase(employeeDepartmentHod[i])) {
-                        if (existingHods.contains(employeeDepartment[i])) {
-                            existingHods.remove(employeeDepartment[i]);
+                        if (existingDepartments.contains(employeeDepartment[i])) {
+                            existingDepartments.remove(employeeDepartment[i]);
                         } else {
-                            employmentDao.assignUserAsDepartmentHOD(u.getId(), employeeDepartment[i]);
+                            employmentDao.assignUserToDepartment(u.getId(), employeeDepartment[i]);
+                        }
+                        existingOrgs.remove(employeeDeptOrganization[i]);
+
+                        if ("true".equalsIgnoreCase(employeeDepartmentHod[i])) {
+                            if (existingHods.contains(employeeDepartment[i])) {
+                                existingHods.remove(employeeDepartment[i]);
+                            } else {
+                                employmentDao.assignUserAsDepartmentHOD(u.getId(), employeeDepartment[i]);
+                            }
                         }
                     }
                 }
@@ -1162,10 +1170,10 @@ public class ConsoleWebController {
                 for (int i = 0; i < employeeGrade.length; i++) {
                     if (existingGrades.contains(employeeGrade[i])) {
                         existingGrades.remove(employeeGrade[i]);
-                        existingOrgs.remove(employeeGradeOrganization[i]);
                     } else {
                         employmentDao.assignUserToGrade(u.getId(), employeeGrade[i]);
                     }
+                    existingOrgs.remove(employeeGradeOrganization[i]);
                 }
             }
             for (String d : existingHods) {
@@ -3891,13 +3899,14 @@ public class ConsoleWebController {
         } else {
             tableNameList = new ArrayList<String>();
         }
-
+        Set<String> existingTables = new HashSet<String>();
         JSONArray jsonArray = new JSONArray();
         Map blank = new HashMap();
         blank.put("value", "");
         blank.put("label", "");
         jsonArray.put(blank);
         for (String name : tableNameList) {
+            existingTables.add(name);
             Map data = new HashMap();
             data.put("value", name);
             data.put("label", name);
@@ -3906,10 +3915,12 @@ public class ConsoleWebController {
         
         Collection<String> customTables = CustomFormDataTableUtil.getTables(appDef);
         for (String table : customTables) {
-            Map data = new HashMap();
-            data.put("value", table);
-            data.put("label", table);
-            jsonArray.put(data);
+            if (!existingTables.contains(table)) {
+                Map data = new HashMap();
+                data.put("value", table);
+                data.put("label", table);
+                jsonArray.put(data);
+            }
         }
         
         jsonArray = sortJSONArray(jsonArray, "label", false);
@@ -4388,6 +4399,8 @@ public class ConsoleWebController {
         booleanSettingsList.add("disableWebConsole");
         booleanSettingsList.add("disablePerformanceAnalyzer");
         booleanSettingsList.add("disableListRenderHtml");
+        
+        boolean refreshPlugins = false;
 
         //request params
         Enumeration e = request.getParameterNames();
@@ -4404,6 +4417,13 @@ public class ConsoleWebController {
             if (setting == null) {
                 setting = new Setting();
                 setting.setProperty(paramName);
+            }
+            
+            if ("dataFileBasePath".equals(paramName)) {
+                String orgValue = (setting.getValue() != null)?setting.getValue():"";
+                if (!orgValue.equals(paramValue)) {
+                    refreshPlugins = true;
+                }
             }
             
             if (SetupManager.MASTER_LOGIN_PASSWORD.equals(paramName) || SetupManager.SMTP_PASSWORD.equals(paramName)) {
@@ -4433,7 +4453,11 @@ public class ConsoleWebController {
             }
         }
 
-        pluginManager.refresh();
+        if (refreshPlugins) {
+            pluginManager.refresh();
+        } else {
+            pluginManager.clearCache();
+        }
         workflowManager.internalUpdateDeadlineChecker();
         FileStore.updateFileSizeLimit();
 
