@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
-import net.sf.ehcache.Cache;
 import net.sf.ehcache.Element;
 import org.hibernate.Query;
 import org.joget.apps.app.model.AppDefinition;
@@ -24,16 +23,16 @@ public class FormDefinitionDaoImpl extends AbstractAppVersionedObjectDao<FormDef
     public static final String ENTITY_NAME = "FormDefinition";
     
     private FormColumnCache formColumnCache;
-    private Cache cache;
+    private AppDefCache cache;
     
     @Autowired
     AppDefinitionDao appDefinitionDao;
     
-    public Cache getCache() {
+    public AppDefCache getCache() {
         return cache;
     }
 
-    public void setCache(Cache cache) {
+    public void setCache(AppDefCache cache) {
         this.cache = cache;
     }
     
@@ -102,18 +101,25 @@ public class FormDefinitionDaoImpl extends AbstractAppVersionedObjectDao<FormDef
         FormDefinition formDef = super.loadById(id, appDefinition);
         return formDef;
     }
+    
+    protected boolean shouldEvict(AppDefinition appDefinition) {
+        return true;
+    }
 
     @Override
     public FormDefinition loadById(String id, AppDefinition appDefinition) {
         String cacheKey = getCacheKey(id, appDefinition.getAppId(), appDefinition.getVersion());
-        Element element = cache.get(cacheKey);
+        Element element = cache.get(cacheKey, appDefinition);
 
         if (element == null) {
             FormDefinition formDef = load(id, appDefinition);
 
             if (formDef != null) {
+                if (shouldEvict(appDefinition)) {
+                    findSession().evict(formDef);
+                }
                 element = new Element(cacheKey, (Serializable) formDef);
-                cache.put(element);
+                cache.put(element, appDefinition);
             }
             return formDef;
         } else {
@@ -123,6 +129,10 @@ public class FormDefinitionDaoImpl extends AbstractAppVersionedObjectDao<FormDef
     
     @Override
     public boolean add(FormDefinition object) {
+        // save in db
+        object.setDateCreated(new Date());
+        object.setDateModified(new Date());
+        
         boolean result = super.add(object);
         appDefinitionDao.updateDateModified(object.getAppDefinition());
 
@@ -139,15 +149,14 @@ public class FormDefinitionDaoImpl extends AbstractAppVersionedObjectDao<FormDef
         
         // clear cache
         formColumnCache.remove(object.getTableName());
-        
-        // save in db
-        object.setDateCreated(new Date());
-        object.setDateModified(new Date());
         return result;
     }
 
     @Override
     public boolean update(FormDefinition object) {
+        // update object
+        object.setDateModified(new Date());
+        
         boolean result = super.update(object);
         appDefinitionDao.updateDateModified(object.getAppDefinition());
 
@@ -164,10 +173,8 @@ public class FormDefinitionDaoImpl extends AbstractAppVersionedObjectDao<FormDef
         
         // clear from cache
         formColumnCache.remove(object.getTableName());
-        cache.remove(getCacheKey(object.getId(), object.getAppId(), object.getAppVersion()));
+        cache.remove(getCacheKey(object.getId(), object.getAppId(), object.getAppVersion()), object.getAppDefinition());
         
-        // update object
-        object.setDateModified(new Date());
         return result;
     }
 
@@ -197,7 +204,7 @@ public class FormDefinitionDaoImpl extends AbstractAppVersionedObjectDao<FormDef
                 
                 // clear from cache
                 formColumnCache.remove(obj.getTableName());
-                cache.remove(getCacheKey(id, appDef.getId(), appDef.getVersion()));
+                cache.remove(getCacheKey(id, appDef.getId(), appDef.getVersion()), appDef);
                 
                 if (!AppDevUtil.isGitDisabled()) {
                     // delete json
