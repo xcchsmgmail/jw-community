@@ -1385,25 +1385,30 @@ public class AppUtil implements ApplicationContextAware {
                 String timezoneString = AppUtil.processHashVariable((String) properties.get("icsTimezone"), wfAssignment, null, null, appDef);
                 SimpleDateFormat sdFormat =  new SimpleDateFormat(dateFormat);
                 
-                String gmt = WorkflowUtil.getSystemSetupValue("systemTimeZone");
-                if (gmt != null && !gmt.isEmpty()) {
-                    TimeZone timeZone = TimeZone.getTimeZone(TimeZoneUtil.getTimeZoneByGMT(gmt));
-                    sdFormat.setTimeZone(timeZone);
-                }
+                boolean isAllDay = ("true".equalsIgnoreCase((String) properties.get("icsAllDay"))) || isFullDayTimeframe(startDateTime, endDateTime);
                 
+                //ignore timezone when it is fullday event
                 net.fortuna.ical4j.model.TimeZone timezone = null;
-                TimeZoneRegistry registry = TimeZoneRegistryFactory.getInstance().createRegistry();
-                try {
-                    if (!timezoneString.isEmpty()) {
-                        timezone = registry.getTimeZone(timezoneString);
+                if (!isAllDay) {
+                    String gmt = WorkflowUtil.getSystemSetupValue("systemTimeZone");
+                    if (gmt != null && !gmt.isEmpty() && !isAllDay) {
+                        TimeZone timeZone = TimeZone.getTimeZone(TimeZoneUtil.getTimeZoneByGMT(gmt));
+                        sdFormat.setTimeZone(timeZone);
                     }
-                } catch (Exception et) {}
-                
-                try {
-                    if (timezone == null) {
-                        timezone = registry.getTimeZone(TimeZoneUtil.getServerTimeZoneID());
-                    }
-                } catch (Exception et) {}
+                    
+                    TimeZoneRegistry registry = TimeZoneRegistryFactory.getInstance().createRegistry();
+                    try {
+                        if (!timezoneString.isEmpty()) {
+                            timezone = registry.getTimeZone(timezoneString);
+                        }
+                    } catch (Exception et) {}
+
+                    try {
+                        if (timezone == null) {
+                            timezone = registry.getTimeZone(TimeZoneUtil.getServerTimeZoneID());
+                        }
+                    } catch (Exception et) {}
+                }
                 
                 java.util.Calendar startDate = new GregorianCalendar();
                 if (timezone != null) {
@@ -1412,22 +1417,50 @@ public class AppUtil implements ApplicationContextAware {
                 startDate.setTime(sdFormat.parse(startDateTime));
                 DateTime start = new DateTime(startDate.getTime());
                 
-                VEvent event;
-                
-                if ("true".equalsIgnoreCase((String) properties.get("icsAllDay")) || endDateTime.isEmpty()) {
-                    event = new VEvent(start, eventName);
-                } else {
-                    java.util.Calendar endDate = new GregorianCalendar();
+                java.util.Calendar endDate = null;
+                if (!endDateTime.isEmpty()) {
+                    endDate = new GregorianCalendar();
                     if (timezone != null) {
                         endDate.setTimeZone(timezone);
                     }
                     endDate.setTime(sdFormat.parse(endDateTime));
-                    DateTime end = new DateTime(endDate.getTime());
                     
+                    if (isAllDay) {
+                        if (endDate.get(java.util.Calendar.HOUR_OF_DAY) == 0 && 
+                            endDate.get(java.util.Calendar.MINUTE) == 0) {
+                            //minus 1 day
+                            endDate.add(java.util.Calendar.DATE, -1);
+                        }
+                        //if start date & end date is same day
+                        if (startDate.get(java.util.Calendar.DATE) == endDate.get(java.util.Calendar.DATE) && 
+                            startDate.get(java.util.Calendar.MONTH) == endDate.get(java.util.Calendar.MONTH)&& 
+                            startDate.get(java.util.Calendar.YEAR) == endDate.get(java.util.Calendar.YEAR)) {
+                            endDate = null;
+                        }
+                    }
+                }
+                
+                VEvent event;
+                
+                if (endDate != null) {
                     event = new VEvent();
-                    event.getProperties().add(new DtStart(start.toString(),timezone));
-                    event.getProperties().add(new DtEnd(end.toString(),timezone));
                     event.getProperties().add(new Summary(eventName));
+                    
+                    if (isAllDay) {
+                        event.getProperties().add(new DtStart(new net.fortuna.ical4j.model.Date(startDate.getTime())));
+                        event.getProperties().add(new DtEnd(new net.fortuna.ical4j.model.Date(endDate.getTime())));
+                    } else {
+                        DateTime end = new DateTime(endDate.getTime());
+                
+                        event.getProperties().add(new DtStart(start.toString(),timezone));
+                        event.getProperties().add(new DtEnd(end.toString(),timezone));
+                    }
+                } else {
+                    if (isAllDay) {
+                        event = new VEvent(new net.fortuna.ical4j.model.Date(startDate.getTime()), eventName);
+                    } else {
+                        event = new VEvent(start, eventName);
+                    }
                 }
                 
                 UidGenerator ug = new FixedUidGenerator("joget-workflow");
@@ -1483,11 +1516,19 @@ public class AppUtil implements ApplicationContextAware {
                 }
                 
                 calendar.getComponents().add(event);
+                
                 email.attach(new ByteArrayDataSource(calendar.toString(), "text/calendar;charset=UTF-8;ENCODING=8BIT;method=REQUEST"), MimeUtility.encodeText("invite.ics"), "");
             }
         } catch (Exception e) {
             LogUtil.error(AppUtil.class.getName(), e, null);
         }
+    }
+    
+    public static boolean isFullDayTimeframe(String startDate, String endDate) {
+        return (startDate.endsWith("00:00") || startDate.toLowerCase().endsWith("12:00 am")) &&
+                (endDate == null || endDate.isEmpty() || // no end date
+                (endDate.endsWith("00:00") || endDate.toLowerCase().endsWith("12:00 am")) || //end date is start of second day
+                (endDate.endsWith("23:59") || endDate.toLowerCase().endsWith("11:59 pm"))); //end date is end of the day
     }
     
     public static AppDefinition getAppDefinitionByProcess(String processDefId) {
