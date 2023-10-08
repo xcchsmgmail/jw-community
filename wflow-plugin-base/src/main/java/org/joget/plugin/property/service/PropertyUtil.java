@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 import org.joget.commons.util.LogUtil;
 import org.joget.commons.util.SecurityUtil;
 import org.joget.commons.util.StringUtil;
+import org.joget.plugin.base.HashVariableSupportedMap;
 import org.joget.plugin.base.PluginManager;
 import org.joget.plugin.property.model.PropertyEditable;
 import org.json.JSONArray;
@@ -91,7 +92,7 @@ public class PropertyUtil implements ApplicationContextAware {
                             if (options.length() > 0) {
                                 JSONObject o = options.getJSONObject(0);
                                 if (o.has("value")) {
-                                    values.put(property.getString("name"), o.getString("value"));
+                                    values.put(property.getString("name"), o.get("value").toString());
                                 }
                             }
                         }
@@ -111,13 +112,13 @@ public class PropertyUtil implements ApplicationContextAware {
         boolean useRegex = false;
         
         String control_field = obj.getString("control_field");
-        String control_value = obj.getString("control_value");
-        if (obj.has("control_use_regex") && "true".equalsIgnoreCase(obj.getString("control_use_regex"))) {
+        String control_value = obj.get("control_value").toString();
+        if (obj.has("control_use_regex") && "true".equalsIgnoreCase(obj.get("control_use_regex").toString())) {
             useRegex = true;
         }
         
         if (values != null && values.has(control_field)) {
-            String value = values.getString(control_field);
+            String value = values.get(control_field).toString();
             if (useRegex) {
                 isVisible = value.matches(control_value);
             } else {
@@ -168,7 +169,7 @@ public class PropertyUtil implements ApplicationContextAware {
                         } else if (value instanceof JSONObject) {
                             properties.put(key, getProperties((JSONObject) value));
                         } else {
-                            String stringValue = obj.getString(key);
+                            String stringValue = obj.get(key).toString();
                             if ("{}".equals(stringValue)) {
                                 properties.put(key, new HashMap<String, Object>());
                             } else {
@@ -290,7 +291,7 @@ public class PropertyUtil implements ApplicationContextAware {
                         if (s.contains(PASSWORD_PROTECTED_VALUE)) {
                             newJson = newJson.replaceAll(StringUtil.escapeRegex(s), StringUtil.escapeRegex(passwordProperty.get(s)));
                         } else {
-                            String tempS = s.replaceAll(SecurityUtil.ENVELOPE, "");
+                            String tempS = StringUtil.unescapeJSON(s).replaceAll(SecurityUtil.ENVELOPE, "");
                             tempS = SecurityUtil.encrypt(tempS);
 
                             newJson = newJson.replaceAll(StringUtil.escapeRegex(s), StringUtil.escapeRegex(tempS));
@@ -326,7 +327,11 @@ public class PropertyUtil implements ApplicationContextAware {
     }
     
     public static Map<String, Object> getHashVariableSupportedMap(Map<String, Object> properties) {
-        return getHelper().getHashVariableSupportedMap(properties);
+        if (!(properties instanceof HashVariableSupportedMap)) {
+            return getHelper().getHashVariableSupportedMap(properties);
+        } else {
+            return properties;
+        }
     }
     
     private static PluginHashVariableHelper getHelper() {

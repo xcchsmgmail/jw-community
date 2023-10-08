@@ -40,7 +40,6 @@ public class DataListExcelWriter {
         this.wb = wb;
         this.sheet = sheet;
         this.sheet.setRandomAccessWindowSize(100);
-        this.sheet.trackAllColumnsForAutoSizing();
         
         headerStyle = (XSSFCellStyle) wb.createCellStyle();
         headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
@@ -81,7 +80,7 @@ public class DataListExcelWriter {
             if (customStyles.get(backgroundColor) == null) {
                 XSSFCellStyle custom = (XSSFCellStyle) wb.createCellStyle();
                 custom.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-                custom.setFillForegroundColor(new XSSFColor(backgroundColor));
+                custom.setFillForegroundColor(new XSSFColor(backgroundColor, wb.getXSSFWorkbook().getStylesSource().getIndexedColors()));
                 custom.setFont(headerFont);
                 customStyles.put(backgroundColor, custom);
             }
@@ -112,6 +111,8 @@ public class DataListExcelWriter {
      * Set all columns to auto width
      */
     public void adjustColumnWidth() {
+        //this should only set before calling autoSizeColumn, else it will create performance issue
+        this.sheet.trackAllColumnsForAutoSizing();
         // adjust the column widths
         int colCount = 0;
         while (colCount <= totalColumnNumber) {

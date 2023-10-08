@@ -176,6 +176,26 @@ AssignmentManager = {
 };
 
 UrlUtil = {
+    //Similar to $.serialize but including empty value selectbox, checkbox & radio button
+    serializeForm : function(form) {
+        var params = $(form).serialize();
+        
+        //check for selectbox, checboxes & radio
+        $(form).find('select, input[type="checkbox"], input[type="radio"]').each(function(){
+            if ($(this).is("[name]") && !$(this).prop('disabled')) {
+                var name = $(this).attr("name");
+                if (params.indexOf(name) === -1) {
+                    //the field is not exist in params, add an empty value for it
+                    if (params !== "") {
+                        params += "&";
+                    }
+                    params += name + "=";
+                }
+            }
+        });
+        return params;
+    },
+    
     updateUrlParam : function(url, param, paramValue) {
         var qs1 = "";
         var qs2 = param + "=" + paramValue;
@@ -254,6 +274,32 @@ UrlUtil = {
             }
         }catch(err){}
         return queryString;
+    },
+    
+    /*
+     * To fix the url parameter and form fields having same key,
+     * Spring framework 5 will return an array for both value in URL and Field.
+     */
+    solveUrlParamFormFieldConflict: function(form) {
+        if (!form) {
+            return;
+        }
+        var url = $(form).attr("action");
+        if (url !== null && url !== undefined && url !== "" && url.indexOf("?") !== -1) {
+            var changed = false;
+            var params = UrlUtil.getUrlParams(url);
+            for (var p in params) {
+                var field = FormUtil.getField(p, form);
+                if (field.length > 0 && !field.prop('disabled') && field.attr("id") === p) {
+                    delete params[p];
+                    changed = true;
+                }
+            }
+            if (changed) {
+                url = url.substring(0, url.indexOf("?")) + "?" + UrlUtil.constructUrlQueryString(params);
+                $(form).attr("action", url);
+            }
+        }
     }
 };
 

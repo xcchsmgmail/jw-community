@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.collections4.map.LRUMap;
+import org.joget.apps.app.dao.PluginDefaultPropertiesDao;
 import org.joget.apps.app.lib.RulesDecisionPlugin;
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.apps.app.model.PackageDefinition;
@@ -57,14 +58,9 @@ public class AppPluginUtil implements ApplicationContextAware {
     
     public static PluginDefaultProperties getPluginDefaultProperties(String id, AppDefinition appDef) {
         if (appDef != null) {
-            Collection<PluginDefaultProperties> list = appDef.getPluginDefaultPropertiesList();
-            if (list != null && !list.isEmpty()) {
-                for (PluginDefaultProperties p : list) {
-                    if (p.getId().equals(id)) {
-                        return p;
-                    }
-                }
-            }
+            //use dao to retrieve as there is cache implementation for it
+            PluginDefaultPropertiesDao dao = (PluginDefaultPropertiesDao) appContext.getBean("pluginDefaultPropertiesDao");
+            return dao.loadById(id, appDef);
         }
         return null;
     }
@@ -118,6 +114,7 @@ public class AppPluginUtil implements ApplicationContextAware {
      * @return 
      */
     public static Map getDefaultProperties(Plugin plugin, Map propertyMap, AppDefinition appDef, WorkflowAssignment assignment) {
+        AppUtil.setCurrentAssignment(assignment, true); // set the assignment for HashVariableSupportedMapImpl
         
         if (propertyMap == null) {
             propertyMap = new HashMap();
@@ -155,6 +152,8 @@ public class AppPluginUtil implements ApplicationContextAware {
         } catch (Exception e) {
             LogUtil.error(AppPluginUtil.class.getName(), e, "Error @ getDefaultProperties");
         }
+        
+        propertyMap = PropertyUtil.getHashVariableSupportedMap(propertyMap);
 
         return propertyMap;
     }
@@ -183,45 +182,7 @@ public class AppPluginUtil implements ApplicationContextAware {
      * @return 
      */
     public static String getRuleEditorScript(HttpServletRequest request, HttpServletResponse response) {
-        String variables = "";
-        String transitions = "";
-        
-        String processId = SecurityUtil.validateStringInput(request.getParameter("processId"));
-        
-        AppDefinition appDef = AppUtil.getCurrentAppDefinition();
-        PackageDefinition packageDef = appDef.getPackageDefinition();
-        if (packageDef != null) {
-            processId = AppUtil.getProcessDefIdWithVersion(packageDef.getId(), packageDef.getVersion().toString(), processId);
-        }
-        if (!processId.isEmpty()) {
-            String actId = SecurityUtil.validateStringInput(request.getParameter("actId"));
-            
-            WorkflowManager workflowManager = (WorkflowManager) WorkflowUtil.getApplicationContext().getBean("workflowManager");
-            
-            //get variable list
-            Collection<WorkflowVariable> variableList = workflowManager.getProcessVariableDefinitionList(processId);
-            if (variableList != null && !variableList.isEmpty()) {
-                for (WorkflowVariable v : variableList) {
-                    if (!variables.isEmpty()) {
-                        variables += ",";
-                    }
-                    variables += "\"" + v.getId() + "\"";
-                }
-            }
-            
-            //get transision list
-            Map<String, String> transitionsList = workflowManager.getNonExceptionalOutgoingTransitions(processId, actId);
-            if (transitionsList != null && !transitionsList.isEmpty()) {
-                for (String t : transitionsList.keySet()) {
-                    if (!transitions.isEmpty()) {
-                        transitions += ",";
-                    }
-                    transitions += "{\"value\":\"" + t + "\", \"label\":\"" + StringUtil.escapeString(transitionsList.get(t), StringUtil.TYPE_JSON, null) + "\"}";
-                }
-            }
-        }
-        
-        return AppUtil.readPluginResource(RulesDecisionPlugin.class.getName(), "/properties/app/rulesEditor.js", new String[]{variables, transitions}, false, null);
+        return AppUtil.readPluginResource(RulesDecisionPlugin.class.getName(), "/properties/app/rulesEditor.js", null, false, null);
     }
     
     /**
@@ -271,7 +232,9 @@ public class AppPluginUtil implements ApplicationContextAware {
         String cacheKey = prefix + "::";
         for (Object keyObj: properties.keySet()) {
             String key = keyObj.toString();
-            if (key.startsWith(prefix) && !key.equals("elementUniqueKey")) { // ignore random generated elementUniqueKey
+            
+            // should only cache style related value, else when no prefix, it parsed all hash variable unnecessary
+            if (key.startsWith(prefix+"css-") || key.startsWith(prefix+"attr-") || key.startsWith(prefix+"style-")) { 
                 Object val = properties.get(keyObj);
                 String strVal = "";
                 if (val != null) {

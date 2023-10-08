@@ -60,7 +60,7 @@ body.rtl .form-row label{
 }
 body.rtl .form-row .form-input{
     margin-left: 0px;
-    margin-right: 195px;
+    margin-right: 240px;
 }
 body.rtl select:not([class^="ui-"]){
     padding-right: 2px;
@@ -71,12 +71,13 @@ body.rtl select:not([class^="ui-"]){
 /* popup */
 body.rtl .ui-dialog-titlebar{
     right: auto;
-    left: 40px;
+    left: 0px;
 }
 body.rtl .boxy-wrapper .title-bar a.close,
 body.rtl .ui-dialog-titlebar-close{
     right: auto !important;
     left: 10px !important;
+    top: 20px !important;
 }
 body.rtl.popupBody #main-body-header #main-action-help{
     right: auto;
@@ -94,10 +95,44 @@ body.rtl button:before, body.rtl input[type='button']:before, body.rtl input[typ
 
 /* table */
 body.rtl .flexigrid{
-    text-align:right;
-    direction:ltr;
+    float: right !important;
+    direction: rtl;
+    margin-bottom: 20px;
 }
-
+body.rtl .flexigrid div.hDivBox{
+    padding-right: 0px !important;
+    float: right;
+    direction: rtl;
+}
+body.rtl .flexigrid div.pDiv div.pDiv2 {
+    float: right;
+    width: auto;
+}
+body .flexigrid div.hDiv th > div{
+    text-align: right;
+}
+body.rtl .flexigrid div.hDiv th:nth-child(1){
+    border-right: 0px;
+}
+body.rtl .flexigrid div.nDiv{
+    height: auto !important;
+    width: 100px !important;
+}
+body.rtl .flexigrid div.nBtn{
+    height: 36px !important;
+}
+body.rtl .flexigrid div.nDiv td.ndcol1{
+    border-left: 1px solid #ccc;
+    border-right: 0px !important;
+}
+body.rtl .flexigrid div.nDiv td.ndcol2{
+    border-left: 0px !important;
+    border-right: 1px solid #fff;
+}
+body.rtl .flexigrid div.hDiv th, body.rtl .flexigrid div.bDiv td{
+    border-right: 1px solid #fff !important;
+    border-left: 1px solid #ddd !important;
+}
 /* plugin */
 .property-editor-container input + input,
 .property-editor-container .button_form + input {
@@ -218,6 +253,10 @@ body.rtl .participant-remove{
 body.rtl .nv-link {
     margin-right: 0px;
     margin-left: 10px;
+}
+
+body.rtl .chosen-rtl.chosen-container:not(.chosen-with-drop) .chosen-drop{
+    display:none;
 }
 
 @media screen and (max-width:680px) {

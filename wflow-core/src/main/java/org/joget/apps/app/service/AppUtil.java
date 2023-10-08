@@ -51,6 +51,7 @@ import org.joget.apps.app.dao.UserReplacementDao;
 import org.joget.apps.app.lib.EmailTool;
 import org.joget.apps.app.model.AppDefinition;
 import org.joget.apps.app.model.BuilderDefinition;
+import org.joget.apps.app.model.CreateAppOption;
 import org.joget.apps.app.model.DatalistDefinition;
 import org.joget.apps.app.model.FormDefinition;
 import org.joget.apps.app.model.HashVariablePlugin;
@@ -80,10 +81,12 @@ import org.joget.directory.model.User;
 import org.joget.directory.model.service.DirectoryManager;
 import org.joget.plugin.base.Plugin;
 import org.joget.plugin.base.PluginManager;
+import org.joget.plugin.property.model.PropertyEditable;
 import org.joget.plugin.property.service.PropertyUtil;
 import org.joget.workflow.model.WorkflowAssignment;
 import org.joget.workflow.model.WorkflowProcess;
 import org.joget.workflow.model.service.WorkflowManager;
+import org.joget.workflow.shark.model.dao.WorkflowAssignmentDao;
 import org.joget.workflow.util.WorkflowUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -93,6 +96,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.ClassUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -112,6 +116,7 @@ public class AppUtil implements ApplicationContextAware {
     
     static ApplicationContext appContext;
     static ThreadLocal currentAssignment = new ThreadLocal();
+    static ThreadLocal currentAssignmentRequiredReset = new ThreadLocal();
     static ThreadLocal currentAppDefinition = new ThreadLocal();
     static ThreadLocal resetAppDefinition = new ThreadLocal();
     static ThreadLocal processAppDefinition = new ThreadLocal();
@@ -157,7 +162,49 @@ public class AppUtil implements ApplicationContextAware {
      * @throws BeansException
      */
     public static void setCurrentAssignment(WorkflowAssignment assignment) throws BeansException {
+        setCurrentAssignment(assignment, false);
+    }
+    
+    /**
+     * Ties an Assignment to the current thread. Set requiredReset to true if for temporary.
+     * Used by AppPluginUtil.getDefaultProperties
+     * @param assignment
+     * @param requiredReset
+     * @throws BeansException
+     */
+    public static void setCurrentAssignment(WorkflowAssignment assignment, boolean requiredReset) throws BeansException {
+        if (requiredReset) {
+            WorkflowAssignment current = (WorkflowAssignment) currentAssignment.get();
+            if ((assignment != null && current != null && !assignment.equals(current))
+                    || (assignment != null && current == null)
+                    || (assignment == null && current != null)) {
+                if (current != null) {
+                    currentAssignmentRequiredReset.set(current);
+                } else {
+                    currentAssignmentRequiredReset.set(Boolean.TRUE);
+                }
+            } else {
+                currentAssignmentRequiredReset.set(null); //it is same, no need reset
+            }
+        }
+        
         currentAssignment.set(assignment);
+    }
+    
+    /**
+     * Reset the Assignment tied to the current thread. Used by HashVariableSupportedMapImpl
+     * @throws BeansException
+     */
+    public static void resetCurrentAssignment() throws BeansException {
+        Object resetAssignment = currentAssignmentRequiredReset.get();
+        if (resetAssignment != null) {
+            if (resetAssignment instanceof WorkflowAssignment) {
+                currentAssignment.set((WorkflowAssignment) resetAssignment);
+            } else {
+                currentAssignment.set(null);
+            }
+            currentAssignmentRequiredReset.set(null);
+        }
     }
 
     /**
@@ -220,7 +267,10 @@ public class AppUtil implements ApplicationContextAware {
             try {
                 versionLong = Long.parseLong(version);
             } catch (NumberFormatException e) {
-                // TODO: handle exception
+                // if version is not empty and not number, get published version, 
+                // issue is EnhancedWorkflowUserManager parsing the UI URL may not have version number, 
+                // the version is UI id
+                versionLong = -1l;
             } catch (NullPointerException e) {
                 // TODO: handle exception
             }
@@ -336,6 +386,14 @@ public class AppUtil implements ApplicationContextAware {
     }
     
     /**
+     * Check it is in RTL mode
+     * @return Locale code
+     */
+    public static boolean isRTL() {
+        return "true".equalsIgnoreCase(WorkflowUtil.getSystemSetupValue("rightToLeft")) || getAppLocale().startsWith("ar");
+    }
+    
+    /**
      * Read firstDayifWeek from locale
      * @return fdow
      */
@@ -361,6 +419,14 @@ public class AppUtil implements ApplicationContextAware {
      */
     public static String getAppLanguage() {
         return LocaleContextHolder.getLocale().getLanguage();
+    }
+    
+    /**
+     * Read timezone from Setup
+     * @return timezone id
+     */
+    public static String getAppTimezone() {
+        return LocaleContextHolder.getTimeZone().getID();
     }
     
     /**
@@ -735,6 +801,7 @@ public class AppUtil implements ApplicationContextAware {
                     || format.equals(StringUtil.TYPE_XML)
                     || format.startsWith(StringUtil.TYPE_SEPARATOR)
                     || format.equals(StringUtil.TYPE_EXP)
+                    || format.startsWith(StringUtil.TYPE_DECIMAL)
                     || format.equals(HASH_NO_ESCAPE))) {
                 isValid = false;
             }
@@ -962,15 +1029,32 @@ public class AppUtil implements ApplicationContextAware {
      */
     public static String getUserviewThemeCss() {
         HttpServletRequest request = WorkflowUtil.getHttpServletRequest();
-        if (request != null
-                && request.getParameterValues("__a_") != null && request.getParameterValues("__a_").length > 0
-                && request.getParameterValues("__u_") != null && request.getParameterValues("__u_").length > 0) {
+        if (request != null && 
+                ((request.getParameterValues("__a_") != null && request.getParameterValues("__a_").length > 0 && 
+                request.getParameterValues("__u_") != null && request.getParameterValues("__u_").length > 0) || 
+                (request.getRequestURI().contains("/jsp/userview/popupTemplate.jsp") && //is userview popup & referer is userview
+                request.getHeader("referer") != null && (request.getHeader("referer").contains("/web/userview/") || 
+                request.getHeader("referer").contains("/web/embed/userview/"))))) { 
             
             AppDefinition oriAppDef = AppUtil.getCurrentAppDefinition();
             
             try {
-                String appId = request.getParameterValues("__a_")[0];
-                String uId = request.getParameterValues("__u_")[0];
+                String appId = "";
+                String uId = "";
+                
+                if (request.getParameterValues("__a_") != null && request.getParameterValues("__a_").length > 0 && 
+                    request.getParameterValues("__u_") != null && request.getParameterValues("__u_").length > 0) {
+                    appId = request.getParameterValues("__a_")[0];
+                    uId = request.getParameterValues("__u_")[0];
+                } else {
+                    String[] temp = request.getHeader("referer").substring(request.getHeader("referer").indexOf("/userview/") + 10).split("/");
+                    if (temp.length > 2) {
+                        appId = temp[0];
+                        uId = temp[1];
+                    }
+                }
+                appId = SecurityUtil.validateStringInput(appId);
+                uId = SecurityUtil.validateStringInput(uId);
 
                 if (!appId.isEmpty() && !uId.isEmpty()) {
                     UserviewService userviewService = (UserviewService) appContext.getBean("userviewService");
@@ -1009,7 +1093,7 @@ public class AppUtil implements ApplicationContextAware {
 
                             return html;
                         } else if (theme.getCss() != null) {
-                            return "<style type=\"text/css\">\n" + theme.getCss() + "\n</style>";
+                            return "<link href=\""+request.getContextPath()+"/wro/userview.min.css?build="+ResourceBundleUtil.getMessage("build.number")+"\" rel=\"stylesheet\" type=\"text/css\" />\n<style type=\"text/css\">\n" + theme.getCss() + "\n</style>";
                         }
                     }
                 }
@@ -1065,6 +1149,8 @@ public class AppUtil implements ApplicationContextAware {
     public static void initRequest() {
         // clear current app in thread
         AppUtil.resetAppDefinition();
+        currentAssignment.set(null);
+        currentAssignmentRequiredReset.set(null);
     }
 
     /**
@@ -1072,7 +1158,11 @@ public class AppUtil implements ApplicationContextAware {
      */
     public static void clearRequest() {
         AppUtil.clearAppMessages();
+        currentAppDefinition.remove();
+        resetAppDefinition.remove();
         processAppDefinition.remove();
+        currentAssignment.remove();
+        currentAssignmentRequiredReset.remove();
     }
 
     /**
@@ -1431,25 +1521,30 @@ public class AppUtil implements ApplicationContextAware {
                 String timezoneString = AppUtil.processHashVariable((String) properties.get("icsTimezone"), wfAssignment, null, null, appDef);
                 SimpleDateFormat sdFormat =  new SimpleDateFormat(dateFormat);
                 
-                String gmt = WorkflowUtil.getSystemSetupValue("systemTimeZone");
-                if (gmt != null && !gmt.isEmpty()) {
-                    TimeZone timeZone = TimeZone.getTimeZone(TimeZoneUtil.getTimeZoneByGMT(gmt));
-                    sdFormat.setTimeZone(timeZone);
-                }
+                boolean isAllDay = ("true".equalsIgnoreCase((String) properties.get("icsAllDay"))) || isFullDayTimeframe(startDateTime, endDateTime);
                 
+                //ignore timezone when it is fullday event
                 net.fortuna.ical4j.model.TimeZone timezone = null;
-                TimeZoneRegistry registry = TimeZoneRegistryFactory.getInstance().createRegistry();
-                try {
-                    if (!timezoneString.isEmpty()) {
-                        timezone = registry.getTimeZone(timezoneString);
+                if (!isAllDay) {
+                    String gmt = WorkflowUtil.getSystemSetupValue("systemTimeZone");
+                    if (gmt != null && !gmt.isEmpty() && !isAllDay) {
+                        TimeZone timeZone = TimeZone.getTimeZone(TimeZoneUtil.getTimeZoneByGMT(gmt));
+                        sdFormat.setTimeZone(timeZone);
                     }
-                } catch (Exception et) {}
-                
-                try {
-                    if (timezone == null) {
-                        timezone = registry.getTimeZone(TimeZoneUtil.getServerTimeZoneID());
-                    }
-                } catch (Exception et) {}
+                    
+                    TimeZoneRegistry registry = TimeZoneRegistryFactory.getInstance().createRegistry();
+                    try {
+                        if (!timezoneString.isEmpty()) {
+                            timezone = registry.getTimeZone(timezoneString);
+                        }
+                    } catch (Exception et) {}
+
+                    try {
+                        if (timezone == null) {
+                            timezone = registry.getTimeZone(TimeZoneUtil.getServerTimeZoneID());
+                        }
+                    } catch (Exception et) {}
+                }
                 
                 java.util.Calendar startDate = new GregorianCalendar();
                 if (timezone != null) {
@@ -1458,22 +1553,50 @@ public class AppUtil implements ApplicationContextAware {
                 startDate.setTime(sdFormat.parse(startDateTime));
                 DateTime start = new DateTime(startDate.getTime());
                 
-                VEvent event;
-                
-                if ("true".equalsIgnoreCase((String) properties.get("icsAllDay")) || endDateTime.isEmpty()) {
-                    event = new VEvent(start, eventName);
-                } else {
-                    java.util.Calendar endDate = new GregorianCalendar();
+                java.util.Calendar endDate = null;
+                if (!endDateTime.isEmpty()) {
+                    endDate = new GregorianCalendar();
                     if (timezone != null) {
                         endDate.setTimeZone(timezone);
                     }
                     endDate.setTime(sdFormat.parse(endDateTime));
-                    DateTime end = new DateTime(endDate.getTime());
                     
+                    if (isAllDay) {
+                        if (endDate.get(java.util.Calendar.HOUR_OF_DAY) == 0 && 
+                            endDate.get(java.util.Calendar.MINUTE) == 0) {
+                            //minus 1 day
+                            endDate.add(java.util.Calendar.DATE, -1);
+                        }
+                        //if start date & end date is same day
+                        if (startDate.get(java.util.Calendar.DATE) == endDate.get(java.util.Calendar.DATE) && 
+                            startDate.get(java.util.Calendar.MONTH) == endDate.get(java.util.Calendar.MONTH)&& 
+                            startDate.get(java.util.Calendar.YEAR) == endDate.get(java.util.Calendar.YEAR)) {
+                            endDate = null;
+                        }
+                    }
+                }
+                
+                VEvent event;
+                
+                if (endDate != null) {
                     event = new VEvent();
-                    event.getProperties().add(new DtStart(start.toString(),timezone));
-                    event.getProperties().add(new DtEnd(end.toString(),timezone));
                     event.getProperties().add(new Summary(eventName));
+                    
+                    if (isAllDay) {
+                        event.getProperties().add(new DtStart(new net.fortuna.ical4j.model.Date(startDate.getTime())));
+                        event.getProperties().add(new DtEnd(new net.fortuna.ical4j.model.Date(endDate.getTime())));
+                    } else {
+                        DateTime end = new DateTime(endDate.getTime());
+                
+                        event.getProperties().add(new DtStart(start.toString(),timezone));
+                        event.getProperties().add(new DtEnd(end.toString(),timezone));
+                    }
+                } else {
+                    if (isAllDay) {
+                        event = new VEvent(new net.fortuna.ical4j.model.Date(startDate.getTime()), eventName);
+                    } else {
+                        event = new VEvent(start, eventName);
+                    }
                 }
                 
                 UidGenerator ug = new FixedUidGenerator("joget-workflow");
@@ -1529,11 +1652,19 @@ public class AppUtil implements ApplicationContextAware {
                 }
                 
                 calendar.getComponents().add(event);
+                
                 email.attach(new ByteArrayDataSource(calendar.toString(), "text/calendar;charset=UTF-8;ENCODING=8BIT;method=REQUEST"), MimeUtility.encodeText("invite.ics"), "");
             }
         } catch (Exception e) {
             LogUtil.error(AppUtil.class.getName(), e, null);
         }
+    }
+    
+    public static boolean isFullDayTimeframe(String startDate, String endDate) {
+        return (startDate.endsWith("00:00") || startDate.toLowerCase().endsWith("12:00 am")) &&
+                (endDate == null || endDate.isEmpty() || // no end date
+                (endDate.endsWith("00:00") || endDate.toLowerCase().endsWith("12:00 am")) || //end date is start of second day
+                (endDate.endsWith("23:59") || endDate.toLowerCase().endsWith("11:59 pm"))); //end date is end of the day
     }
     
     public static AppDefinition getAppDefinitionByProcess(String processDefId) {
@@ -1709,5 +1840,69 @@ public class AppUtil implements ApplicationContextAware {
         }
         
         return config;
+    }
+    
+    /**
+     * Used to check is there any completed process in shark table
+     */
+    public static boolean hasNonArchivedProcessData() {
+        WorkflowAssignmentDao workflowAssignmentDao = (WorkflowAssignmentDao)AppUtil.getApplicationContext().getBean("workflowAssignmentDao");
+        return workflowAssignmentDao.hasNonHistoryCompletedProcess() || !isArchivedProcessDataModeEnabled();
+    }
+    
+    /**
+     * Used to check is archive process is enabled in system setting
+     */
+    public static boolean isArchivedProcessDataModeEnabled() {
+        SetupManager setupManager = (SetupManager)AppUtil.getApplicationContext().getBean("setupManager");
+        String mode = setupManager.getSettingValue("deleteProcessOnCompletion");
+        return "archive".equalsIgnoreCase(mode);
+    }
+    
+    /**
+     * Return a map of create app option plugins
+     * 
+     * @return 
+     */
+    public static Map<String, Plugin> getCreateAppOptions() {
+        Map<String, Plugin> options = new HashMap<String, Plugin>();
+        
+        PluginManager pluginManager = (PluginManager)AppUtil.getApplicationContext().getBean("pluginManager");
+        Collection<Plugin> plugins = pluginManager.list(CreateAppOption.class);
+        
+        for (Plugin p : plugins) {
+            if (((CreateAppOption) p).isAvailable()) {
+                options.put(ClassUtils.getUserClass(p).getName(), p);
+            }
+        }
+        
+        return options;
+    }
+    
+    /**
+     * Execute create app option plugin, return errors if there is.
+     * @param plugin
+     * @param propertiesJson
+     * @param appName
+     * @param appId
+     * 
+     * @return 
+     */
+    @Transactional
+    public static Collection<String> executeCreateAppOptionPlugin(CreateAppOption plugin, String propertiesJson, String appId, String appName, HttpServletRequest request) {
+        Collection<String> errors = null;
+        
+        if (plugin != null) {
+            try {
+                if (plugin instanceof PropertyEditable) {
+                    ((PropertyEditable) plugin).setProperties(PropertyUtil.getPropertiesValueFromJson(propertiesJson));
+                }
+                errors = plugin.createAppDefinition(appId, appName, request);
+            } catch (Exception e) {
+                LogUtil.error(AppUtil.class.getName(), e, "Error create app using " + plugin.getClassName());
+            }
+        }
+        
+        return errors;
     }
 }

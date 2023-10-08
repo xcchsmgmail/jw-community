@@ -1,175 +1,231 @@
 (function($){
     $.fn.extend({
         cdatepicker : function(o){
-            this.each(function(){
-                var element = $(this);
-                var elementParent = element.parent();
-                var uid = $(element).attr("id");
+            if (o === "setDateRange") {
+                setDateRange.apply(this, Array.prototype.slice.call( arguments, 1 ));
+            } else {
+                $(this).each(function(){
+                    var element = $(this);
+                    var elementParent = element.parent();
+                    var uid = $(element).attr("id");
+                    var value = $(element).val();
+                    
+                    $(element).data("options", o);
 
-                if (!/iPhone|iPod|iPad/.test(navigator.userAgent)) {
-                    o.beforeShow = function(input, inst) {
-                        $(element).addClass("popup-picker");
-                        setTimeout(function(){
-                            var tabbables = $("#ui-datepicker-div").find(':tabbable');
-                            var first = tabbables.filter(':first');
-                            var last  = tabbables.filter(':last');
+                    if (!/iPhone|iPod|iPad/.test(navigator.userAgent)) {
+                        o.beforeShow = function(input, inst) {
+                            $(element).addClass("popup-picker");
+                            setTimeout(function(){
+                                var tabbables = $("#ui-datepicker-div").find(':tabbable');
+                                var first = tabbables.filter(':first');
+                                var last  = tabbables.filter(':last');
 
-                            $("#ui-datepicker-div").off("keydown", ":tabbable");
-                            $("#ui-datepicker-div").on("keydown", ":tabbable", function(e) {
-                                var keyCode = e.keyCode || e.which;
-                                if (keyCode === 9) {
-                                    var focusedElement = $(e.target);
+                                $("#ui-datepicker-div").off("keydown", ":tabbable");
+                                $("#ui-datepicker-div").on("keydown", ":tabbable", function(e) {
+                                    var keyCode = e.keyCode || e.which;
+                                    if (keyCode === 9) {
+                                        var focusedElement = $(e.target);
 
-                                    var isFirstInFocus = (first.get(0) === focusedElement.get(0));
-                                    var isLastInFocus = (last.get(0) === focusedElement.get(0));
+                                        var isFirstInFocus = (first.get(0) === focusedElement.get(0));
+                                        var isLastInFocus = (last.get(0) === focusedElement.get(0));
 
-                                    var tabbingForward = !e.shiftKey;
+                                        var tabbingForward = !e.shiftKey;
 
-                                    if (tabbingForward) {
-                                        if (isLastInFocus) {
-                                            first.focus();
-                                            e.preventDefault();
+                                        if (tabbingForward) {
+                                            if (isLastInFocus) {
+                                                first.focus();
+                                                e.preventDefault();
+                                            }
+                                        } else {
+                                            if (isFirstInFocus) {
+                                                last.focus();
+                                                e.preventDefault();
+                                            }
                                         }
-                                    } else {
-                                        if (isFirstInFocus) {
-                                            last.focus();
-                                            e.preventDefault();
-                                        }
+                                    } else if (keyCode === 27) {
+                                        $(element).datepicker("hide");
+                                        $(element).next("a.trigger").focus();
                                     }
-                                } else if (keyCode === 27) {
-                                    $(element).datepicker("hide");
-                                    $(element).next("a.trigger").focus();
-                                }
-                            });
-                            first.focus();
-                            
-                            var orizindex = inst.dpDiv.css("z-index");
-                            try {
-                                orizindex = parseInt(orizindex);
-                            } catch (err) {}
-                            inst.dpDiv.css({"z-index":(orizindex + 200)});
-                        }, 100);
-                    };
-                    o.onClose = function(selectedDate) {
-                        $(element).removeClass("popup-picker");
-                        $(element).focus();
-                    };
-                }
-                
-                if ($(element).val() === "" && o.yearRange !== undefined && o.datePickerType !== "timeOnly") {
-                    var yearRange = o.yearRange;
-                    if (yearRange.indexOf("-", 2) > 0) {
-                        yearRange = yearRange.substring(yearRange.indexOf("-", 2));
-                        o.defaultDate = yearRange + "y";
-                    } else if (yearRange.indexOf(":c") < 0 
-                            && yearRange.indexOf(":+") < 0 
-                            && yearRange.indexOf(":-") < 0 
-                            && yearRange.substring(yearRange.indexOf(":") + 1).length === 4) {
-                        yearRange = yearRange.substring(yearRange.indexOf(":") + 1);
-                        var d = new Date();
-                        if (yearRange < d.getFullYear()) {
-                            d.setFullYear(yearRange);
-                            o.defaultDate = d;
-                        }
-                    }
-                }
-                
-                if (o.datePickerType === "dateTime") {
-                    $(element).datetimepicker(o);
-                    createNativeField($(element), "datetime-local", o);
-                } else if (o.datePickerType === "timeOnly") {
-                    $(element).timepicker(o);
-                    createNativeField($(element), "time", o);
-                } else {
-                    $(element).datepicker(o);
-                    createNativeField($(element), "date", o);
-                }
-                
-                if($.placeholder) {
-                    $(element).placeholder();
-                }
-                
-                var a = $("<a>").attr("href","#");
-                $(element).next("img.ui-datepicker-trigger").wrap("<a class=\"trigger\" href=\"#\"></a>");
+                                });
+                                first.focus();
 
-                $(element).next("a.trigger").after("<a class=\"close-icon\" type=\"reset\"></a>");
-                
-                $(element).change(function() {
-                    if ( $(element).val() !== "" ) {
-                        $(elementParent).find("a.close-icon").show();
+                                var orizindex = inst.dpDiv.css("z-index");
+                                try {
+                                    orizindex = parseInt(orizindex);
+                                } catch (err) {}
+                                inst.dpDiv.css({"z-index":(orizindex + 200)});
+                            }, 100);
+                        };
+                        o.onClose = function(selectedDate) {
+                            $(element).removeClass("popup-picker");
+                            $(element).focus();
+                        };
+                    }
+
+                    if ($(element).val() === "" && o.yearRange !== undefined && o.datePickerType !== "timeOnly") {
+                        var yearRange = o.yearRange;
+                        if (yearRange.indexOf("-", 2) > 0) {
+                            yearRange = yearRange.substring(yearRange.indexOf("-", 2));
+                            o.defaultDate = yearRange + "y";
+                        } else if (yearRange.indexOf(":c") < 0 
+                                && yearRange.indexOf(":+") < 0 
+                                && yearRange.indexOf(":-") < 0 
+                                && yearRange.substring(yearRange.indexOf(":") + 1).length === 4) {
+                            yearRange = yearRange.substring(yearRange.indexOf(":") + 1);
+                            var d = new Date();
+                            if (yearRange < d.getFullYear()) {
+                                d.setFullYear(yearRange);
+                                o.defaultDate = d;
+                            }
+                        }
+                    }
+
+                    if (o.datePickerType === "dateTime") {
+                        $(element).datetimepicker(o);
+                        createNativeField($(element), "datetime-local", o);
+                    } else if (o.datePickerType === "timeOnly") {
+                        $(element).timepicker(o);
+                        createNativeField($(element), "time", o);
                     } else {
-                        $(elementParent).find("a.close-icon").hide();
+                        $(element).datepicker(o);
+                        createNativeField($(element), "date", o);
                     }
-                });
-                
-                //Always check first if value already exists
-                $(element).change();
-                
-                $(elementParent).find("a.close-icon").click(function(){
-                    $(element).val("").change();
-                });
-                
-                $(elementParent).find("input[readonly] , a.trigger").click(function(evt){
-                    evt.preventDefault();
-                    evt.stopImmediatePropagation();
-                    showDatepicker($(element));
-                });
-                $(elementParent).find("input , a.trigger").off("keydown").on("keydown", function(evt){
-                    if (evt.keyCode === 13) {
-                        evt.preventDefault();
-                        evt.stopPropagation();
-                        showDatepicker($(element));
+
+                    if($.placeholder) {
+                        $(element).placeholder();
                     }
-                }).on("focus", function() {
-                    $(element).addClass("focus");
-                }).on("focusout", function(){
-                    if (!$(element).hasClass("popup-picker")) {
-                        $(element).removeClass("focus");
-                    }
-                });
-                $(elementParent).find("input[readonly]").on("keydown", function(evt){
-                    if (evt.keyCode === 8) {
-                        $(element).val("").change();
-                        $(element).datepicker("hide");
-                        return false;
-                    }
-                });
-                
-                if (o.startDateFieldId  !== undefined && o.startDateFieldId !== "") {
-                    var startDate = FormUtil.getField(o.startDateFieldId);
-                    var startDateOrg = null;
-                    startDate.off("change.startdate"+uid);
-                    startDate.on("change.startdate"+uid, function() {
-                        if (startDateOrg !== $(startDate).val()) {
-                            startDateOrg = $(startDate).val();
-                            setDateRange(startDate, "minDate", element, o);
+
+                    //modify the date trigger
+                    setTimeout(function(){
+                        //for Arabic
+                        if($(element).next("img.ui-datepicker-trigger").length === 0 && $(element).prev("img.ui-datepicker-trigger").length !== 0){
+                            $(element).after($(element).prev('img.ui-datepicker-trigger'));
                         }
-                    });
-                    setDateRange(startDate, "minDate", element, o);
-                }
-                
-                if (o.endDateFieldId  !== undefined && o.endDateFieldId !== "") {
-                    var endDate = FormUtil.getField(o.endDateFieldId);
-                    var endDateOrg = null;
-                    endDate.off("change.endDate"+uid);
-                    endDate.on("change.endDate"+uid, function() {
-                        if (endDateOrg !== $(endDate).val()) {
-                            endDateOrg = $(endDate).val();
-                             setDateRange(endDate, "maxDate", element, o);
+                        if($(element).next("img.ui-datepicker-trigger").length !== 0){
+                            $(element).next("img.ui-datepicker-trigger").wrap("<a class=\"trigger\"></a>");
                         }
-                    });
-                    setDateRange(endDate, "maxDate", element, o);
-                }
-                
-                if (o.currentDateAs !== undefined && o.currentDateAs !== "") {
-                    var option = $(element).datepicker( "option", o.currentDateAs);
-                    if (option === undefined || option === null) {
-                        $(element).next(".trigger").remove();
-                        $(element).datepicker("option", o.currentDateAs, new Date());
-                        $(element).next("img.ui-datepicker-trigger").wrap("<a class=\"trigger\" href=\"#\"></a>");
+
+                        var clearBtn = $("<a class=\"close-icon\" type=\"reset\"></a>");
+                        $(element).next("a.trigger").after(clearBtn);
+
+                        $(element).off("change.clearBtn");
+                        $(element).on("change.clearBtn", function() {
+                            if ( $(element).val() !== "" ) {
+                                $(clearBtn).show();
+                            } else {
+                                $(clearBtn).hide();
+                            }
+                        });
+
+                        //Always check first if value already exists
+                        $(element).change();
+
+                        $(clearBtn).off("click");
+                        $(clearBtn).on("click", function(){
+                            $(element).val("").change();
+                        });
+
+                        $(elementParent).off("click.dp", "input[readonly] , a.trigger");
+                        $(elementParent).on("click.dp", "input[readonly] , a.trigger", function(evt){
+                            evt.preventDefault();
+                            evt.stopImmediatePropagation();
+                            showDatepicker($(element));
+                        });
+                        $(elementParent)
+                        .off("keydown.dp", "input , a.trigger")
+                        .off("focus.dp", "input , a.trigger")
+                        .off("focusout.dp", "input , a.trigger")
+                        .on("keydown", "input , a.trigger", function(evt){
+                            if (evt.keyCode === 13) {
+                                evt.preventDefault();
+                                evt.stopPropagation();
+                                showDatepicker($(element));
+                            }
+                        }).on("focus.dp", "input , a.trigger", function() {
+                            $(element).addClass("focus");
+                        }).on("focusout.dp", "input , a.trigger", function(){
+                            if (!$(element).hasClass("popup-picker")) {
+                                $(element).removeClass("focus");
+                            }
+                        });
+
+                        $(elementParent).find("input[readonly]").off("keydown.dp");
+                        $(elementParent).find("input[readonly]").on("keydown.dp", function(evt){
+                            if (evt.keyCode === 8) {
+                                $(element).val("").change();
+                                $(element).datepicker("hide");
+                                return false;
+                            }
+                        });
+                    }, 1);  
+                    
+                    var parent;
+                    if ($(element).closest(".subform-container").length > 0) {
+                        parent = $(element).closest(".subform-container");
                     }
-                }
-            });
+                
+                    if (o.startDateFieldId  !== undefined && o.startDateFieldId !== "") {
+                        // try get from the same subform first
+                        var startDate = FormUtil.getField(o.startDateFieldId, parent);
+                        if (parent && $(startDate).length === 0) {
+                            //find from the entire form
+                            startDate = FormUtil.getField(o.startDateFieldId);
+                        }
+                    
+                        var startDateOrg = null;
+                        startDate.off("change.startdate"+uid);
+                        startDate.on("change.startdate"+uid, function() {
+                            if (startDateOrg !== $(startDate).val()) {
+                                startDateOrg = $(startDate).val();
+                                setDateRange(startDate, "minDate", element, o);
+                            }
+                        });
+                        setDateRange(startDate, "minDate", element, o);
+                    }
+
+                    if (o.endDateFieldId  !== undefined && o.endDateFieldId !== "") {
+                        // try get from the same subform first
+                        var endDate = FormUtil.getField(o.endDateFieldId, parent);
+                        if (parent && $(endDate).length === 0) {
+                            //find from the entire form
+                            endDate = FormUtil.getField(o.endDateFieldId);
+                        }
+                        
+                        var endDateOrg = null;
+                        endDate.off("change.endDate"+uid);
+                        endDate.on("change.endDate"+uid, function() {
+                            if (endDateOrg !== $(endDate).val()) {
+                                endDateOrg = $(endDate).val();
+                                 setDateRange(endDate, "maxDate", element, o);
+                            }
+                        });
+                        setDateRange(endDate, "maxDate", element, o);
+                    }
+
+                    if (o.currentDateAs !== undefined && o.currentDateAs !== "") {
+                        var option = $(element).datepicker( "option", o.currentDateAs);
+                        if (option === undefined || option === null) {
+                            var date = new Date();
+                            if (o.isBE !== undefined && o.isBE) {
+                                date = convertToBe(date);
+                            }
+                            $(element).datepicker("option", o.currentDateAs, date);
+                        }
+                    }
+
+                    if ((o.datePickerType !== "dateTime" && o.datePickerType !== "timeOnly") //only apply for datepicker
+                            && o.dateFormat.indexOf("d") === -1  //when the format is without a day syntax
+                            && value !== null && value !== undefined && value !== "") { //there is a default value
+                        //use setTimeout to make sure if there is set other field as min/max, the field are ready before setting this value
+                        setTimeout(function(){
+                            //set the value again with a first day of the month, 
+                            //just simple add the day syntax and 01 value and it seem to work with all formats.
+                            //it is ok to set a date over the min/max date limit, the field will auto adjust to the min/max date value if it is invalid/over the limit
+                            $(element).datepicker("setDate", $.datepicker.parseDate('dd/'+ o.dateFormat, '01/'+value));
+                        }, 1);
+                    }
+                });
+            }
         }
     });
     
@@ -239,7 +295,7 @@
                     nativeField.showPicker(); 
                 } catch (e) {
                     $(element).datepicker("show");
-                        $(element).removeClass("use-native");
+                    $(element).removeClass("use-native");
                 }    
             }
         } else {
@@ -248,7 +304,7 @@
     };
 
     //update input field when native field changed
-    function setDate(element, date, o) {
+    function setDate(element, date, o, focus) {
         if (o.datePickerType === "dateTime") {
             $(element).datetimepicker("setDate", new Date(date) );
         } else if (o.datePickerType === "timeOnly") {
@@ -256,7 +312,13 @@
         } else {
             $(element).datepicker("setDate", new Date(date) );
         }
-        $(element).focus().trigger("change");
+        
+        //should not focus when native field is used.
+        if (!$(element).hasClass("use-native")) {
+            $(element).focus().trigger("change");
+        } else {
+            $(element).trigger("change");
+        }
     };
     
     //update native field when input field changed
@@ -285,6 +347,13 @@
         if (value === "" && $(target).datetimepicker("option", type) === null) {
             return;
         }
+        if ($.datepicker._getInst($(element)[0]) !== undefined) {
+            //use to make sure the value use as min/max are always a valid date if the element itself is a datapicker field
+            value = $(element).datepicker("getDate"); 
+            if (o.isBE !== undefined && o.isBE) {
+                value = convertToBe(value);
+            }
+        }
         $(target).next(".trigger").remove();
         if (o.datePickerType === "dateTime") {
             $(target).datetimepicker("option", type, value);
@@ -298,7 +367,24 @@
         } else {
             $(target).datepicker("option", type, value);
         }
-        $(target).next("img.ui-datepicker-trigger").wrap("<a class=\"trigger\" href=\"#\"></a>");
+        
+        //modify the date trigger
+        setTimeout(function(){
+            //for Arabic
+            if($(element).next("img.ui-datepicker-trigger").length === 0 && $(element).prev("img.ui-datepicker-trigger").length !== 0){
+                $(element).after($(element).prev('img.ui-datepicker-trigger'));
+            }
+            if($(target).next("img.ui-datepicker-trigger").length === 0 && $(target).prev("img.ui-datepicker-trigger").length !== 0){
+                $(target).after($(target).prev('img.ui-datepicker-trigger'));
+            }
+            if($(element).next("img.ui-datepicker-trigger").length !== 0){
+                $(element).next("img.ui-datepicker-trigger").wrap("<a class=\"trigger\"></a>");
+            }
+            if($(target).next("img.ui-datepicker-trigger").length !== 0){
+                $(target).next("img.ui-datepicker-trigger").wrap("<a class=\"trigger\"></a>");
+            }
+        },1);
+
         
         if ($(element).hasClass("use-native")) {
             var date = $(element).datepicker("getDate");
@@ -321,5 +407,14 @@
                 }
             }
         }
+    }
+    
+    function convertToBe(date) {
+        var year = date.getFullYear();
+        if ((parseInt(year) - 543) < 1900) {
+            year = parseInt(year) + 543;
+            date.setFullYear(year);
+        }
+        return date;
     }
 })(jQuery);

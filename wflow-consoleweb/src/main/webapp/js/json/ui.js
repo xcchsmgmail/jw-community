@@ -12,6 +12,15 @@ UI = {
           return span.html();
       }
    },
+   stripHtmlTags: function(c) {
+        if (c == null || c == undefined) {
+            return '';
+        } else {
+            let div= document.createElement("div");
+            div.innerHTML= c;
+            return (div.textContent || div.innerText || "");
+        } 
+   },
    userviewThemeParams: function () {
       var params = ''; 
       if (UI.userview_app_id != undefined && UI.userview_app_id != '') {
@@ -111,7 +120,7 @@ UI = {
         $.unblockUI();
     },
     maxIframe : function(id) {
-        if (id !== "" && $("iframe#" + id).length > 0) {
+        if (id !== "" && $("iframe#" + id).length > 0 && !(/iPhone|iPod|iPad|Safari/.test(navigator.userAgent))) {
             var iframe = $("iframe#" + id);
             $(iframe).trigger("iframe-ui-maxsize");
             if ($(iframe)[0].hasAttribute("frameBorder")) {
@@ -124,7 +133,7 @@ UI = {
         }
     },
     restoreIframe : function(id) {
-        if (id !== "" && $("iframe#" + id).length > 0) {
+        if (id !== "" && $("iframe#" + id).length > 0 && !(/iPhone|iPod|iPad|Safari/.test(navigator.userAgent))) {
             var iframe = $("iframe#" + id);
             var style = $(iframe).data("style");
             if (style === null || style === undefined) {
@@ -138,8 +147,70 @@ UI = {
             $(iframe).removeClass("maxsize");
             $(iframe).trigger("iframe-ui-restore");
         }
+    },
+    /*
+     * Use to replace the window.setInterval with added window visibility change into consideration.
+     * Clear the interval when it is hidden and start it again when it is visible.
+     */
+    visibilityChangeSetInterval : function(name, callback, milliseconds) {
+        if (!(typeof document.addEventListener === "undefined")) {
+            var hidden, visibilityChange;
+            if (typeof document.hidden !== "undefined") { // Opera 12.10 and Firefox 18 and later support 
+                hidden = "hidden";
+                visibilityChange = "visibilitychange";
+            } else if (typeof document.msHidden !== "undefined") {
+                hidden = "msHidden";
+                visibilityChange = "msvisibilitychange";
+            } else if (typeof document.webkitHidden !== "undefined") {
+                hidden = "webkitHidden";
+                visibilityChange = "webkitvisibilitychange";
+            }
+            if (UI.visibilityChangeIntervals === undefined) {
+                UI.visibilityChangeIntervals = {};
+            }
+            document.addEventListener(visibilityChange, function(event){
+                if (!document[hidden]) {
+                    callback();
+                    UI.visibilityChangeIntervals[name] = setInterval(callback, milliseconds);
+                } else if (UI.visibilityChangeIntervals[name] !== undefined && UI.visibilityChangeIntervals[name] !== null) {
+                    clearInterval(UI.visibilityChangeIntervals[name]);
+                    delete UI.visibilityChangeIntervals[name];
+                }
+            }, false);
+        }
+        UI.visibilityChangeIntervals[name] = setInterval(callback, milliseconds);
+    },
+    /*
+     * Retreive i18n messages for javascript usage
+     */
+    loadMsg : function(keys, callback) {
+        if (callback !== undefined && (typeof callback === "function")) {
+            if (UI.messages === undefined) {
+                UI.messages = {};
+            }
+            var missingKeys = [];
+            if (keys !== undefined && keys !== null && keys.length > 0) {
+                for (var i = 0; i < keys.length; i++) {
+                    if (UI.messages[keys[i]] === undefined) {
+                        missingKeys.push(keys[i]);
+                    }
+                }
+            }
+            if (missingKeys.length > 0) {
+                ConnectionManager.post(UI.base + '/web/userview/'+UI.userview_app_id+'/appI18nMessages', {
+                    success : function(data) {
+                        UI.messages = $.extend(UI.messages, eval('['+data+']')[0]);
+                        callback(UI.messages);
+                    }
+                }, {
+                   'keys' : missingKeys
+                });
+            } else {
+                callback(UI.messages);
+            }
+        }
     }
-}
+};
 
 /*
  * Modal popup dialog box showing a URL in an IFRAME
@@ -280,6 +351,7 @@ PopupDialog.prototype = {
                 setTimeout(function() { 
                     newFrame.contentWindow.focus();
                 }, 100);
+                $(newFrame).addClass("iframeloading");
             }
             
             var temWidth = $(window).width();
@@ -499,7 +571,9 @@ JsonTable.prototype = {
         var gridColumns = this.columns;
         {
             var idx;
-            for (idx=0; idx<gridColumns.length; idx++) {
+            var total = 0;
+            var selectionWidth = 0;
+            for (idx = 0; idx < gridColumns.length; idx++) {
                 var col = gridColumns[idx];
                 if (col.key) {
                     col.name = col.key;
@@ -508,27 +582,44 @@ JsonTable.prototype = {
                     col.display = col.label;
                 }
                 if (!col.width) {
-                    //alert(thisObject.width + "," + thisObject.width.charAt(thisObject.width.length-1));
-                    if (typeof thisObject.width == "string" && thisObject.width.charAt(thisObject.width.length-1) == "%") {
+                    if (typeof thisObject.width == "string" && thisObject.width.charAt(thisObject.width.length - 1) == "%") {
                         col.width = 150;
-                    }
-                    else if (typeof thisObject.width == "string" && thisObject.width.substring(thisObject.width.length-2) == "px") {
+                    } else if (typeof thisObject.width == "string" && thisObject.width.substring(thisObject.width.length - 2) == "px") {
                         col.width = 150;
-                    }
-                    else {
-                        col.width = Math.round(thisObject.width/gridColumns.length) - 20;
+                    } else {
+                        col.width = Math.round(thisObject.width / gridColumns.length) - 20;
                     }
                 } else {
-                    if (typeof col.width == "string" && col.width.charAt(col.width.length-1) == "%") {
-                        try {
-                            col.width = ($("body").width() - 50) / 100 * parseInt(col.width.substring(0, col.width.length-1));
-                        } catch(err){
-                            col.width = 200;
+                    if (typeof col.width == "string") {
+                        if (col.width.charAt(col.width.length - 1) == "%") {
+                            try {
+                                col.width = ($("body").width() - 50) / 100 * parseInt(col.width.substring(0, col.width.length - 1));
+                            } catch (err) {
+                                col.width = 200;
+                            }
+                        } else if (col.width.substring(col.width.length - 2) == "px") {
+                            col.width = parseInt(col.width.substring(0, col.width.length - 2));
+                        } else {
+                            col.width = parseInt(col.width);
                         }
                     }
                 }
+                if (col.name === "checkbox" || col.name === "radio") {
+                    selectionWidth += col.width;
+                } else {
+                    total += col.width;
+                }
                 col.process = handleRowSelection;
                 gridColumns[idx] = col;
+            }
+            var tableWidth = $("#" + thisObject.divToUpdate).parent().width() - 40 - selectionWidth;
+            if (total < tableWidth) {
+                for (idx = 0; idx < gridColumns.length; idx++) {
+                    if (gridColumns[idx].name === "checkbox" || gridColumns[idx].name === "radio") {
+                        continue;
+                    }
+                    gridColumns[idx].width = gridColumns[idx].width / total * tableWidth;
+                }
             }
         }
 
@@ -1214,4 +1305,14 @@ HelpGuide = {
         }        
     }
 
+};
+
+/* adding content placeholder to iframe while it is loading*/
+if (window.self !== window.parent && window.frameElement) {
+    window.addEventListener('load', function(event) {
+        $(window.frameElement).removeClass("iframeloading");
+    });
+    window.addEventListener('unload', function(event) {
+        $(window.frameElement).addClass("iframeloading");
+    });
 }

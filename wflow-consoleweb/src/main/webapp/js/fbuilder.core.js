@@ -18,7 +18,7 @@ FormBuilder = {
                 "renderElement" : "FormBuilder.renderElement",
                 "updateElementId" : "FormBuilder.updateElementId",
                 "unloadElement" : "FormBuilder.unloadElement",
-                "selectElement" : "FormBuilder.selectElement",
+                "decorateBoxActions" : "FormBuilder.decorateBoxActions",
                 "renderXray" : "FormBuilder.renderXray",
                 "copyElement" : "FormBuilder.copyElement",
                 "pasteElement" : "FormBuilder.pasteElement"
@@ -131,7 +131,42 @@ FormBuilder = {
                     return component.builderTemplate.sectionStylePropertiesDefinition;
                 }
             };
-            component.builderTemplate.sectionStylePropertiesDefinition = $.extend(true, [], self.generateStylePropertiesDefinition("section", [{}, {'prefix' : 'header', 'label' : get_cbuilder_msg('ubuilder.header')}]));
+            component.builderTemplate.sectionStylePropertiesDefinition = $.extend(true, [], 
+                self.generateStylePropertiesDefinition("section", [
+                    {}, 
+                    {'prefix' : 'header', 'label' : get_cbuilder_msg('ubuilder.header')},
+                    {'prefix' : 'fieldLabel', 'label' : get_cbuilder_msg('fbuilder.fieldLabel')},
+                    {'prefix' : 'fieldInput', 'label' : get_cbuilder_msg('fbuilder.fieldInput')}
+                ]));
+                
+            component.builderTemplate.sectionStylePropertiesDefinition.push({
+                title:'Others',
+                properties:[
+                    {
+                        name : 'css-label-position',
+                        label : get_cbuilder_msg('fbuilder.fieldLabelPosition'),
+                        type : 'selectbox',
+                        options : [
+                            {value : '', label : 'Default'},
+                            {value : 'label-left', label : 'Left'},
+                            {value : 'label-top', label : 'Top'}
+                        ],
+                        viewport : 'desktop'
+                    },
+                    {
+                        name : 'css-tablet-label-position',
+                        label : get_cbuilder_msg('fbuilder.fieldLabelPosition'),
+                        type : 'selectbox',
+                        options : [
+                            {value : '', label : 'Default'},
+                            {value : 'tablet-label-left', label : 'Left'},
+                            {value : 'tablet-label-top', label : 'Top'}
+                        ],
+                        viewport : 'tablet'
+                    }
+                ]
+            }); 
+                        
         } else if (component.className === "org.joget.apps.form.model.Section") {
             component.builderTemplate.parentContainerAttr = "sections";
             component.builderTemplate.childsContainerAttr = "columns";
@@ -168,27 +203,19 @@ FormBuilder = {
                 FormBuilder.recalculateColumnWidth($(parent));
             };
         } else {
+            component.builderTemplate.getStylePropertiesDefinition = FormBuilder.getStylePropertiesDefinition;
+            component.builderTemplate.renderPermission = FormBuilder.renderPermission;            
+            
             component.builderTemplate.stylePropertiesDefinition.push({
-                title:'Others',
+                title: get_cbuilder_msg('fbuilder.others'),
                 properties:[
                     {
                         name : 'css-classes',
-                        label : 'CSS Classes',
+                        label : get_cbuilder_msg('fbuilder.cssClasses'),
                         type : 'textfield'
-                    },
-                    {
-                        name : 'css-label-position',
-                        label : 'Label Position',
-                        type : 'selectbox',
-                        options : [
-                            {value : '', label : 'Default'},
-                            {value : 'label-left', label : 'Left'},
-                            {value : 'label-top', label : 'Top'}
-                        ]
                     }
                 ]
             });
-            component.builderTemplate.renderPermission = FormBuilder.renderPermission;
         }
     },
     
@@ -249,6 +276,7 @@ FormBuilder = {
                         $(newElement).find("> *:not(.form-section):not(style)").remove();
                         
                         $(element).replaceWith(wrapper);
+                        CustomBuilder.Builder.recursiveCheckVisible(newElement);
                     } else {
                         $(element).replaceWith(newElement);
                     }
@@ -272,18 +300,20 @@ FormBuilder = {
     },
     
     /*
-     * A callback method called from the default component.builderTemplate.selectNode method.
+     * A callback method called from the default component.builderTemplate.decorateBoxActions method.
      * It used to add column and add section action button when a section is selected
      */
-    selectElement : function(element, elementObj, component) {
+    decorateBoxActions : function(element, elementObj, component, box) {
+        var builder = CustomBuilder.Builder;
+        
         if (elementObj.className === "org.joget.apps.form.model.Section") {
-            $("#element-select-box #element-options").append('<a id="columns-btn" href="" title="'+get_cbuilder_msg("fbuilder.addColumn")+'"><i class="las la-columns"></i></a><a id="default-style-btn" href="" title="'+get_cbuilder_msg('style.defaultStyles')+'" style=""><i class="las la-palette"></i></a>');
+            $(box).find(".element-options").append('<a class="columns-btn" title="'+get_cbuilder_msg("fbuilder.addColumn")+'"><i class="las la-columns"></i></a><a class="default-style-btn" title="'+get_cbuilder_msg('style.defaultStyles')+'" style=""><i class="las la-palette"></i></a>');
             
-            $("#element-select-box #element-bottom-actions").append('<a id="add-section-btn" href="" title="'+get_cbuilder_msg("fbuilder.addSection")+'"><i class="las la-plus"></i></a>');
+            $(box).find(".element-bottom-actions").append('<a class="add-section-btn" href="" title="'+get_cbuilder_msg("fbuilder.addSection")+'"><i class="las la-plus"></i></a>');
             
-            $("#columns-btn").off("click");
-            $("#columns-btn").on("click", function(event) {
-                $("#element-select-box").hide();
+            $(box).find(".columns-btn").off("click");
+            $(box).find(".columns-btn").on("click", function(event) {
+                builder.boxActionSetElement(event);
                 
                 FormBuilder.addColumn();
                 
@@ -291,9 +321,9 @@ FormBuilder = {
                 return false;
             });
             
-            $("#add-section-btn").off("click");
-            $("#add-section-btn").on("click", function(event) {
-                $("#element-select-box").hide();
+            $(box).find(".add-section-btn").off("click");
+            $(box).find(".add-section-btn").on("click", function(event) {
+                builder.boxActionSetElement(event);
                 
                 FormBuilder.addSection();
                 
@@ -301,9 +331,10 @@ FormBuilder = {
                 return false;
             });
             
-            $("#default-style-btn").off("click");
-            $("#default-style-btn").on("click", function(){
-                var builder = CustomBuilder.Builder;
+            $(box).find(".default-style-btn").off("click");
+            $(box).find(".default-style-btn").on("click", function(event){
+                builder.boxActionSetElement(event);
+                
                 $("body").removeClass("no-right-panel");
                 $("#element-properties-tab-link").hide();
                 $("#right-panel #element-properties-tab").find(".property-editor-container").remove();
@@ -328,6 +359,7 @@ FormBuilder = {
                 label = FormBuilder.availableBinder[label];
             } else {
                 label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                label = '<span class="missing-plugin">' + label + '</span>';
             }
             dl.append('<dt><i class="las la-upload" title="'+get_advtool_msg('dependency.tree.Load.Binder')+'"></i></dt><dd>'+label+'</dd>');
         }
@@ -337,6 +369,7 @@ FormBuilder = {
                 label = FormBuilder.availableBinder[label];
             } else {
                 label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                label = '<span class="missing-plugin">' + label + '</span>';
             }
             dl.append('<dt><i class="las la-download" title="'+get_advtool_msg('dependency.tree.Store.Binder')+'"></i></dt><dd>'+label+'</dd>');
         }
@@ -346,6 +379,7 @@ FormBuilder = {
                 label = FormBuilder.availableBinder[label];
             } else {
                 label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                label = '<span class="missing-plugin">' + label + '</span>';
             }
             dl.append('<dt><i class="las la-upload" title="'+get_advtool_msg('dependency.tree.Options.Binder')+'"></i></dt><dd>'+label+'</dd>');
         }
@@ -355,6 +389,7 @@ FormBuilder = {
                 label = FormBuilder.availableValidator[label];
             } else {
                 label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                label = '<span class="missing-plugin">' + label + '</span>';
             }
             dl.append('<dt><i class="las la-asterisk" title="'+get_advtool_msg('dependency.tree.Validator')+'"></i></dt><dd>'+label+'</dd>');
         }
@@ -365,6 +400,7 @@ FormBuilder = {
                 label = CustomBuilder.availablePermission[label];
             } else {
                 label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                label = '<span class="missing-plugin">' + label + '</span>';
             }
             permissionLabel.push(label);
         }
@@ -378,6 +414,7 @@ FormBuilder = {
                         label = FormBuilder.availablePermission[label];
                     } else {
                         label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                        label = '<span class="missing-plugin">' + label + '</span>';
                     }
                     if ($.inArray(label, permissionLabel) === -1) {
                         permissionLabel.push(label);
@@ -531,6 +568,69 @@ FormBuilder = {
     },
     
     /*
+     * Return custom styling definition to support styling for label and input field
+     */
+    getStylePropertiesDefinition: function(elementObj, component) {
+        var self = CustomBuilder.Builder;
+        
+        //if having label
+        if ($(self.selectedEl).find('> label.label').length > 0) {
+            var style;
+            if (component.builderTemplate.valueStylePropertiesDefinition === undefined || component.builderTemplate.labelStylePropertiesDefinition === undefined) {
+                style = $.extend(true, [] , component.builderTemplate.stylePropertiesDefinition);
+                
+                //tempory remove the last and adding label position for it
+                var other = style.pop();
+                other.properties.push({
+                        name : 'css-label-position',
+                        label : get_cbuilder_msg('fbuilder.fieldLabelPosition'),
+                        type : 'selectbox',
+                        options : [
+                            {value : '', label : 'Default'},
+                            {value : 'label-left', label : 'Left'},
+                            {value : 'label-top', label : 'Top'}
+                        ],
+                        viewport : 'desktop'
+                    });
+                other.properties.push({
+                        name : 'css-tablet-label-position',
+                        label : get_cbuilder_msg('fbuilder.fieldLabelPosition'),
+                        type : 'selectbox',
+                        options : [
+                            {value : '', label : 'Default'},
+                            {value : 'tablet-label-left', label : 'Left'},
+                            {value : 'tablet-label-top', label : 'Top'}
+                        ],
+                        viewport : 'tablet'
+                    });     
+                    
+                component.builderTemplate.labelStylePropertiesDefinition = $.merge([], style);
+                component.builderTemplate.labelStylePropertiesDefinition = $.merge(component.builderTemplate.labelStylePropertiesDefinition, self.generateStylePropertiesDefinition("", [
+                        {'prefix' : 'fieldLabel', 'label' : get_cbuilder_msg('fbuilder.fieldLabel')}
+                    ]));
+                component.builderTemplate.labelStylePropertiesDefinition = $.merge(component.builderTemplate.labelStylePropertiesDefinition, [other]);    
+                
+                
+                component.builderTemplate.valueStylePropertiesDefinition = $.merge([], style);
+                component.builderTemplate.valueStylePropertiesDefinition = $.merge(component.builderTemplate.valueStylePropertiesDefinition, self.generateStylePropertiesDefinition("", [
+                        {'prefix' : 'fieldLabel', 'label' : get_cbuilder_msg('fbuilder.fieldLabel')},
+                        {'prefix' : 'fieldInput', 'label' : get_cbuilder_msg('fbuilder.fieldInput')}
+                    ]));
+                component.builderTemplate.valueStylePropertiesDefinition = $.merge(component.builderTemplate.valueStylePropertiesDefinition, [other]); 
+            }
+            
+            //if having input field
+            if ($(self.selectedEl).find('> label.label + *:not(.ui-screen-hidden):not(div.form-clear), > label.label + .ui-screen-hidden + *, > label.label + div.form-clear + *').length > 0) {
+                return component.builderTemplate.valueStylePropertiesDefinition;
+            } else {
+                return component.builderTemplate.labelStylePropertiesDefinition;
+            }
+        } else {
+            return component.builderTemplate.stylePropertiesDefinition;
+        }
+    },
+    
+    /*
      * To add a column when an add column action button is clicked
      */
     addColumn: function(noUpdate) {
@@ -561,7 +661,11 @@ FormBuilder = {
         FormBuilder.recalculateColumnWidth(parent);
         
         var temp = $('<div></div>');
-        self.selectedEl.append(temp);
+        if (self.selectedEl.find(".clear-float").length > 0) {
+            self.selectedEl.find(".clear-float").before(temp);
+        } else {
+            self.selectedEl.append(temp);
+        }
         
         self.renderElement(elementObj, temp, self.component, true);
         
@@ -790,7 +894,7 @@ FormBuilder = {
                         $("#diagram-grid").append($("#diagram-grid .col:eq(0)").clone());
                         $("#diagram-grid .col").append('<div class="row"></div>');
                     }
-
+                    
                     function findEmptyCell(x, y) {
                         if ($('#diagram-grid .col:eq('+x+') .row:eq('+y+') .entity-container').length === 0) {
                             return [x, y];
@@ -800,12 +904,25 @@ FormBuilder = {
                                 for (var j=x-1; j<=x+1; j++) {
                                     if (j >= 0 && i >= 0 && j < limit && i < limit 
                                             && !((j === x && (i === y-1 || i === y+1))) //not putting on direct top & bottom
+                                            && !((j === y && (i === x-1 || i === x+1))) //not putting on direct left & right
                                             && $('#diagram-grid .col:eq('+j+') .row:eq('+i+') .entity-container').length === 0) {
                                         return [j, i];
                                     }
                                 }
                             }
-                            return findEmptyCell(x+1, y+1);
+                            if (x+1 >= limit && y+1 >= limit) {
+                                //start from first cell again
+                                x = 0;
+                                y = 0;
+                            } else if (x+1 >= limit) {
+                                y += 1; //find from next row
+                            } else if (y+1 >= limit) {
+                                x += 1; //find from next col
+                            } else {
+                                x += 1;
+                                y += 1;
+                            }
+                            return findEmptyCell(x, y);
                         }
                     }
 
@@ -866,6 +983,31 @@ FormBuilder = {
                     
                     var unindexed = {};
                     
+                    function getRandomRGBColor() {
+                        return [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
+                    }
+                    
+                    function getRGBLightness(color) {
+                        return ((color[0]*299)+(color[1]*587)+(color[2]*114))/1000;
+                    }
+                    
+                    function rgbToHex(color) {
+                        var hexR = color[0].toString(16).padStart(2, "0");
+                        var hexG = color[1].toString(16).padStart(2, "0");
+                        var hexB = color[2].toString(16).padStart(2, "0");
+                        return "#" + hexR + hexG + hexB;
+                    }
+                    
+                    function getRandomDarkColor() {
+                        var color;
+                        do {
+                            color = getRandomRGBColor();
+                        } while (getRGBLightness(color) > 70);
+
+                        // return the color in hexadecimal format
+                        return rgbToHex(color);
+                    }
+                    
                     function checkIndexField(entity, field) {
                         if (!$("#" + entity + "_field_" + field + " .label .markindex").hasClass("indexed") && !$("#"+entity+"_container").hasClass("external")) {
                             if (unindexed[entity] === undefined) {
@@ -895,12 +1037,14 @@ FormBuilder = {
                                 jsPlumb.connect({
                                     source: $("#" + entity1 + "_field_" + entityField1),
                                     target: $("#" + entity2 + "_field_" + entityField2),
-                                    connector: ["Flowchart", {midpoint: (Math.random() * 0.6 + 0.3)}]
+                                    connector: ["Flowchart", {cornerRadius: 5, stub : (Math.random() * 40 + 15)}],
+                                    anchors: ['ContinuousLeft', 'ContinuousRight'],
+                                    paintStyle: {strokeStyle: getRandomDarkColor(), lineWidth: 2, outlineWidth: 15, outlineColor: 'transparent'}
                                 });
                             } catch (err) {}
                         }
                     }
-
+                    
                     function placeEntity(entity, x, y) {
                         if (x === undefined) {
                             x = Math.round($("#diagram-grid .col").length/2) - 1;
@@ -1267,11 +1411,7 @@ FormBuilder = {
      */
     copyElement: function(data, type) {
         if (type === "elements") {
-            var $temp = $("<input>");
-            $("body").append($temp);
-            $temp.val("#form." + CustomBuilder.data.properties.tableName + "." + data.properties.id +"#").select();
-            document.execCommand("copy");
-            $temp.remove();            
+            CustomBuilder.copyTextToClipboard("#form." + CustomBuilder.data.properties.tableName + "." + data.properties.id +"#", false);
         }
     },
 
@@ -1294,13 +1434,9 @@ FormBuilder = {
      */
     afterUpdate: function() {
         if ($("#generator-btn").length > 0) {
-            if (FormBuilder.isEmpty() || !FormBuilder.isSaved()) {
+            if (!FormBuilder.isSaved()) {
                 $("#generator-btn").addClass("disabled");
-                if (FormBuilder.isEmpty()) {
-                    $("#generator-btn").attr("title",  $("#generator-btn").attr("title-empty"));
-                } else {
-                    $("#generator-btn").attr("title",  $("#generator-btn").attr("title-unsave"));
-                }
+                $("#generator-btn").attr("title",  $("#generator-btn").attr("title-unsave"));
             } else {
                 $("#generator-btn").removeClass("disabled");
                 $("#generator-btn").attr("title",  $("#generator-btn").attr("title-default"));
@@ -1319,5 +1455,5 @@ FormBuilder = {
         jsPlumb.detachEveryConnection();
         jsPlumb.deleteEveryEndpoint();
         jsPlumb.reset();
-    } 
+    }
 }

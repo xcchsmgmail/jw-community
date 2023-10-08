@@ -67,20 +67,6 @@ function setFontSize(size) {
             setCookie("20");
         });
         
-        //fix tinymce position
-        if ($(".tinymce").length > 0) {
-            function overrideTinymce() {
-                if (window["tinymce"] !== undefined) {
-                    tinymce.Env.container = document.getElementById("form-canvas").offsetParent;
-                } else {
-                    setTimeout(function(){
-                        overrideTinymce();
-                    }, 100);
-                }
-            }
-            overrideTinymce();
-        }
-        
         if ($("#sidebar").length > 0) {
             //Scroll to active menu
             setTimeout(function () {
@@ -279,6 +265,10 @@ function setFontSize(size) {
 
         //add button effect to responsive table
         $(".dataList table").on("footable_row_detail_updated", function(event) {
+            attachButtonEffect();
+        });
+        $("body").off("dynamicContentLoaded");
+        $("body").on("dynamicContentLoaded", function(){
             attachButtonEffect();
         });
 

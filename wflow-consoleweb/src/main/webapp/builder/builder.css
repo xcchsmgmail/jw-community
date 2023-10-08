@@ -403,9 +403,6 @@ body.right-panel-resizing #right-panel-resize-block{
 #cbuilder[data-browser="ie"] #builder_canvas{
     left:30px;
 }
-#cbuilder.default-builder #builder_canvas {
-    max-width: 1200px;
-}
 #cbuilder.quick-nav-shown #builder_canvas {
     width: calc( 100vw - 35px - 13.5vw);
     width: calc( 100vw - 35px - (var(--builder-left-panel-width) + var(--builder-canvas-margin)));
@@ -431,7 +428,7 @@ body.right-panel-resizing #right-panel-resize-block{
     max-width: calc(100vw - 10px - var(--builder-left-panel-width));
 }
 #cbuilder #builder_canvas.mobile{
-    width: 320px !important;
+    width: 375px !important;
     background: #eee;
     max-width: calc(100vw - 10px - 13.5vw);
     max-width: calc(100vw - 10px - var(--builder-left-panel-width));
@@ -505,6 +502,12 @@ body.right-panel-resizing #right-panel-resize-block{
     top: 0px;
     left: 0px;
     display: none; }
+#cbuilder #element-select-box.missing_component{
+    border: 1px solid #f00;
+}
+#cbuilder #element-highlight-box.missing_component {
+    border: 1px solid #ff7373;
+}
 #cbuilder #wysiwyg-editor {
     position: absolute;
     right: -1px;
@@ -513,23 +516,14 @@ body.right-panel-resizing #right-panel-resize-block{
     color: #fff;
     padding: 0px 0px;
     border-radius: 3px 3px 0px 0px; }
-#cbuilder #element-actions a, #cbuilder #wysiwyg-editor a, #cbuilder #element-highlight-box-actions a#add-section-btn {
+#cbuilder .element-actions a, #cbuilder #wysiwyg-editor a, #cbuilder #element-highlight-box .element-bottom-actions a {
     pointer-events: auto;
+    cursor: pointer;
     color: #fff;
     font-size: 16px;
     padding-right: 2px;
     padding: 2px 5px; }
-#cbuilder #element-actions a:hover, #cbuilder #wysiwyg-editor a:hover, #cbuilder #element-highlight-box-actions a#add-section-btn:hover, #cbuilder #element-bottom-actions a:hover {
-    text-decoration: none;
-    background: #1266f1; }
-#cbuilder #element-bottom-actions{
-    position: absolute;
-    bottom : -28px;
-    left : 50%;
-    transform: translateX(-50%);
-    color: #fff;
-}
-#cbuilder #element-bottom-actions a {
+#cbuilder .element-bottom-actions a {
     text-decoration: none;
     pointer-events: auto;
     color: #fff;
@@ -543,6 +537,28 @@ body.right-panel-resizing #right-panel-resize-block{
     line-height: 24px;
     border-radius: 50%;
     margin: 1px;
+    padding: 0 !important;
+}
+#cbuilder #element-highlight-box .element-bottom-actions a {
+    background: #54c5fd;
+}
+#cbuilder .element-actions a:hover, #cbuilder #wysiwyg-editor a:hover, #cbuilder .element-bottom-actions a:hover {
+    text-decoration: none;
+    background: #1266f1; }
+#cbuilder #element-highlight-box .element-actions a:hover, #cbuilder #element-highlight-box .element-bottom-actions a:hover {
+    background: #00a5f5; }
+#cbuilder .element-bottom-actions{
+    position: absolute;
+    bottom : -15px;
+    left : 50%;
+    transform: translateX(-50%);
+    color: #fff;
+}
+#cbuilder #element-highlight-box .element-options,
+#cbuilder #element-select-box .element-options{
+    display: inline-block;
+    visibility: visible;
+    position: relative;
 }
 #cbuilder #wysiwyg-editor {
     top: -2.4rem;
@@ -588,33 +604,6 @@ body.right-panel-resizing #right-panel-resize-block{
     font-size: 1rem; }
 #cbuilder #wysiwyg-editor div.dropdown a.dropdown-item i {
     margin-right: 0; }
-#cbuilder #element-highlight-box-actions {
-    bottom: 0px;
-    position: absolute;
-    border-radius: 3px 3px 0px 0px;
-    bottom: -10px;
-    left: 50%;
-    left: calc(50% - 12px); 
-}
-#cbuilder #element-highlight-box-actions.outside {
-    bottom: -25px; 
-}
-#cbuilder #element-highlight-box-actions a#add-btn {
-    position: relative;
-    bottom: 0px;
-    background: #4285f4;
-    color: #fff;
-    font-size: 18px;
-    border-radius: 20px;
-    width: 32px;
-    height: 32px;
-    padding: 3px 7px;
-    cursor: pointer;
-    display: block; 
-}
-#cbuilder #element-highlight-box-actions a#add-btn i {
-    font-weight: 600; 
-}
 #cbuilder #element-parent-name,
 #cbuilder #element-highlight-name,
 #cbuilder #element-select-name{
@@ -628,21 +617,29 @@ body.right-panel-resizing #right-panel-resize-block{
     display: inline-block;
     border-radius: 3px 3px 0px 0px; 
 }
-#cbuilder #element-parent-name,
 #cbuilder #element-highlight-name,
-#cbuilder #element-select-name #element-name{
+#cbuilder #element-select-name{
+    pointer-events: auto;
+}
+#cbuilder #element-parent-name,
+#cbuilder #element-highlight-name .element-name,
+#cbuilder #element-select-name .element-name{
     padding: 3px 8px;
 }
-#cbuilder #element-select-name #element-name{
+#cbuilder #element-highlight-name .element-name,
+#cbuilder #element-select-name .element-name{
     cursor: move;
     pointer-events: auto;
 }   
-#cbuilder #element-select-name #element-name,
-#cbuilder #element-select-name #element-actions{
+#cbuilder #element-highlight-name .element-name,
+#cbuilder #element-highlight-name .element-actions,
+#cbuilder #element-select-name .element-name,
+#cbuilder #element-select-name .element-actions{
     display:inline-block;
     vertical-align: top;
 }
-#cbuilder #element-select-name #element-actions{
+#cbuilder #element-highlight-name .element-actions
+#cbuilder #element-select-name .element-actions{
     margin-left: 3px;
 }
 #cbuilder #element-select-name{
@@ -650,6 +647,12 @@ body.right-panel-resizing #right-panel-resize-block{
 }
 #cbuilder #element-parent-name{
     background: #08565c;
+}
+#cbuilder .missing_component #element-highlight-name{
+    background: #ff7373;
+}
+#cbuilder .missing_component #element-select-name {
+    background: #f00;
 }
 #cbuilder .nav-tabs .nav-item:first-child .nav-link {
     border-left: none; 
@@ -747,6 +750,7 @@ body.right-panel-resizing #right-panel-resize-block{
 .drag-elements-sidepane ul > li ol li {
     list-style: none;
     float: left; 
+    border-radius: 5px;
 }
 .drag-elements-sidepane ul > li ol li a {
     color: #333;
@@ -800,7 +804,8 @@ body.right-panel-resizing #right-panel-resize-block{
 }
 .components-list li ol li:hover{
     box-shadow: 0px 0px 1px 0px #4285f4;
-    background-color: #007bff; 
+    background-color: #007bff;
+    border-color: #007bff;
     color:#fff;
 }
 .components-list li ol li:hover a {
@@ -1508,7 +1513,7 @@ div.section, .header > ol {
     background: #718595;
 }
 .xray-builder-view #element-select-name,
-.xray-builder-view #element-bottom-actions{
+.xray-builder-view .element-bottom-actions{
     display:none;
 }
 #permissionView .builder-view-body{
@@ -1601,9 +1606,6 @@ div.section, .header > ol {
     text-align: right;
     background: #dee2e6;
 }
-.element-properties .element-properties-header-actions button {
-    font-size: 60%;
-}
 .element-properties .tab-content {
     height : calc(100% - 150px);
     padding-top: 32px;
@@ -1621,10 +1623,15 @@ div.section, .header > ol {
 }
 #expand-all-props-btn,
 #collapse-all-props-btn,
-#cancel-properties-btn{
+#cancel-properties-btn,
+#right-panel-window-move,
+.element-properties-header-actions .btn-link-secondary{
     font-size: 18px;
     line-height: 18px;
     padding: 2px;
+}
+body.right-panel-mode-window #right-panel{
+    
 }
 .viewport-icon {
     font-size: 20px;
@@ -1875,6 +1882,10 @@ body #quick-nav-bar {
     transition: 0.35s all ease-in-out;
     background: #ddd;
     overflow: hidden;
+    overflow-y: auto;
+}
+body #quick-nav-bar::-webkit-scrollbar {
+    width: 3px;
 }
 body.quick-nav-shown #quick-nav-bar {
     width:30px;
@@ -2152,6 +2163,31 @@ body.quick-nav-shown #builder-quick-nav {
     border-color: #b8daff;
 }
 
+/* app ot exist*/
+#appNotExist {
+    background:#0000006e; 
+    position:fixed; 
+    top:0; 
+    left:0; 
+    right:0; 
+    bottom:0; 
+    z-index: 2100;
+}
+
+#appNotExist .error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    padding: 20px;
+    min-width: 300px;
+    font-size: 16px;
+    transform: translate(-50%, -50%);
+    border-radius: 5px;
+}
+
 /* Popup dialog */
 .boxy-wrapper {
     display: block;
@@ -2215,17 +2251,17 @@ body.popupBody {
     scrollbar-width: thin; 
 }
 *::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-    background-color: rgba(255, 255, 255, 0.1);
+    width: 8px;
+    height: 8px;
+    background-color: rgba(255, 255, 255, 0.15);
     -webkit-box-shadow: none; 
 }
 *::-webkit-scrollbar-track {
     -webkit-box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.05); 
 }
 *::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.15);
-    outline: 1px solid slategrey; 
+    background-color: rgba(78, 100, 117, 0.5);
+    outline: 1px solid rgba(78, 100, 117, 0.5); 
 }
 
 /* property editor builder style */
@@ -2361,4 +2397,158 @@ body.rtl div#builderModeOption:before {
     #cbuilder #top-panel .btn-group .btn span{
         display: none;
     }
+    #cbuilder .components-list{
+        overflow-y: auto;
+    }
 } 
+
+/* tinymce fix */
+#cbuilder > .tox-tinymce-aux{
+    width:0px !important;
+}
+
+/* properties panel window */
+#dock-properties-btn,  
+body.right-panel-mode-window #window-properties-btn,
+body.right-panel-mode-window.max-property-editor #right-panel-resize{
+    display:none !important;
+}
+body.right-panel-mode-window #right-panel{
+    outline: none;
+    border-radius: 8px;
+    transition: all 0.3s ease 0s;
+    box-shadow: 0 5px 15px rgb(0 0 0 / 65%);
+    overflow: hidden;
+    background-clip: padding-box;
+    border: 1px solid #ddd !important;
+    border-top: 3px solid #dee2e6 !important;
+}
+body.right-panel-mode-window #dock-properties-btn{
+    display: inline-block !important;
+}
+body.right-panel-mode-window #right-panel-window-move{
+    position: absolute;
+    top: 8px;
+    left: 9px;
+    cursor: move;
+    display: block !important;
+    z-index: 10;
+    border: 0px;
+    background: transparent;
+    outline:none;
+}
+body.right-panel-mode-window .element-properties{
+    background-color: #fff;
+}
+body.right-panel-mode-window .element-properties-header-actions{
+    width: 30%;
+    position: absolute;
+    top:0px;
+    right: 0px;
+    padding: 6px;
+}
+body.right-panel-mode-window .element-properties-header-actions .float-left {
+    float: right !important;
+}
+body.right-panel-mode-window .element-properties-header-actions .float-left > * {
+    float: right !important;
+}
+body.right-panel-mode-window .element-properties-header-actions .float-right {
+    position: absolute;
+    top: 47px;
+    right: 18px;
+    z-index: 30;
+}
+body.right-panel-mode-window #properties-tabs{
+    width: 70%;
+    position: absolute;
+    top:0px;
+    left: 0px;
+    padding-left: 40px;
+}
+body.right-panel-mode-window .element-properties-footer-actions{
+    background: #fff;
+    position: absolute;
+    bottom: 0px;
+    width: 100%;
+}
+body.right-panel-mode-window .element-properties-header{
+    border-bottom: 0;
+    background: #fff;
+    padding: 10px 15px;
+    top: 36px;
+    left: -3px;
+    right: -2px;
+    width: auto;
+    padding-right: 48px;
+}
+body.right-panel-mode-window .element-properties-header .search input{
+    border-right-color: #ced4da !important;
+    border-bottom-color: #ced4da !important;
+}
+body.right-panel-mode-window .element-properties .tab-content{
+    height: calc(100% - 48px);
+    padding-top: 90px;
+}
+body.right-panel-mode-window .editor-panel-mode .property-editor-pages{
+    background: #fff;
+}
+body.right-panel-mode-window #right-panel .nav-tabs .nav-link.active, 
+body.right-panel-mode-window #right-panel .nav-tabs .nav-item.show .nav-link{
+    border-color: #fff;
+    background-color: #fff;
+}
+
+body.right-panel-mode-window #right-panel-window-resize  {
+  display: block !important;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+}
+#right-panel-window-resize,
+#right-panel-window-resize:before,
+#right-panel-window-resize:after {
+  background-image: radial-gradient(#fff 40%, transparent 40%);
+  background-size: 5px 5px;
+  background-position: 0 100%;
+  background-repeat: repeat-x;
+}
+#right-panel-window-resize:before,
+#right-panel-window-resize:after {
+  content: '';
+  display: block;
+  height: 34%;
+  margin-left: 32%;
+}
+#right-panel-window-resize:before {
+  width: 34%;
+  margin-left: 64%;
+}
+#advancedView dl dt{
+    font-weight: bold;
+    float: left;
+    width: 200px;
+}
+#advancedView dl dd{
+    margin-left: 150px;
+}
+#advancedView dl {
+    font-size: 14px;
+    line-height: 25px;
+}
+#advancedView{
+    padding: 15px 15px 10px;
+    background: rgb(255, 255, 255);
+    margin: 15px 45px 10px 0px;
+    border-radius: 8px;
+    box-shadow: rgba(0, 0, 0, 0.05) 0px 6px 24px 0px, rgba(0, 0, 0, 0.08) 0px 0px 0px 1px;
+}
+.copybtn{
+    cursor: default;
+    background-color: #F9F9F9;
+    padding: 5px 13px;
+    border-radius: 15px;
+}

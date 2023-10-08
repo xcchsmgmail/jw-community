@@ -270,6 +270,21 @@ body .editor-cell select:not([class^=ui]){
     border-radius: 2px;
     float: left;
 }
+body input[disabled],
+body input[readonly] {
+  cursor: not-allowed;
+  background-color: #eeeeee;
+}
+body input.no-manual-input{
+    cursor: text;
+    background-color: #fff;
+}
+body input[size],
+body .editor-cell input[size]{
+    min-width: unset;
+    max-width: unset;
+    width: auto;
+}
 body .ql-container.ql-bubble{
     border: 1px solid #e6e6e6;
     border-radius: 2px;
@@ -625,6 +640,7 @@ body .hasDatepicker + a, body .hasDatepicker + img {
     position: absolute;
     padding: 2px 5px;
     display: inline-block;
+    cursor: pointer;
 }
 body .filter-cell .hasDatepicker + a, body .filter-cell .hasDatepicker + img {
     right: auto;
@@ -636,16 +652,24 @@ body.rtl .filter-cell .hasDatepicker + a, body.rtl .filter-cell .hasDatepicker +
     margin-right: -21px;
 }
 body .filter-cell input.hasDatepicker {
-    padding-right: 25px;
+    padding-right: 40px;
 }
 body.rtl .filter-cell input.hasDatepicker {
-    padding-left: 25px;
+    padding-left: 40px;
     padding-right: auto;
 }
-body .hasDatepicker + a + .close-icon, body .hasDatepicker + img + .close-icon{
-    position: relative;
-    top: -3px;
-    left: 15px;
+body .hasDatepicker + a + .close-icon:after {
+    top: 0px;
+    margin-left: 25px;
+    margin-top: 8px;
+}
+body.rtl .hasDatepicker + a + .close-icon:after {
+    margin-right: 25px;
+}
+body .dataList .filter-cell .close-icon:after{
+    right: 34px !important;
+    top: 11px !important;
+
 }
 body .ui-timepicker-div .ui_tpicker_time .ui_tpicker_time_input{
     float:none;
@@ -680,6 +704,7 @@ body #form-canvas .selector_element .selector_button {
     color: #fff;
     padding: 3px 10px;
     border-radius: 2px;
+    cursor: pointer;
 }
 body #form-canvas .selector_element .selector_item{
     border-radius: 2px;

@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -25,7 +26,7 @@ import org.joget.workflow.util.WorkflowUtil;
 public class DataList {
 
     public static final Integer DEFAULT_PAGE_SIZE = 10;
-    public static final Integer MAXIMUM_PAGE_SIZE = 100000;
+    public static final Integer MAXIMUM_PAGE_SIZE = -1;
     public static final String ACTION_POSITION_TOP_LEFT = "topLeft";
     public static final String ACTION_POSITION_TOP_RIGHT = "topRight";
     public static final String ACTION_POSITION_BOTTOM_LEFT = "bottomLeft";
@@ -89,6 +90,7 @@ public class DataList {
     private boolean isAuthorized = true;
     private String unauthorizedMsg = null;
     private DataListTemplate template = null;
+    private Boolean isUsingInboxBinder = null;
     
     private Map<String, Object> properties;
     
@@ -116,7 +118,7 @@ public class DataList {
         }
         properties.put(property, value);
     }
-
+    
     //Required when using session
     public void init() {
         try {
@@ -254,6 +256,9 @@ public class DataList {
                 if (c.getAction() != null && c.getAction() instanceof DataListActionDefault) {
                     ((DataListActionDefault) c.getAction()).setDatalist(this);
                 }
+                if (c instanceof DataListDisplayColumnProxy) {
+                    ((DataListDisplayColumnProxy) c).setDatalist(this);
+                }
             }
         }
         
@@ -354,6 +359,9 @@ public class DataList {
             } else {
                 pageSize = getDefaultPageSize();
             }
+        }
+        if (Objects.equals(pageSize, MAXIMUM_PAGE_SIZE)) { //if show max, return the record size
+            pageSize = getSize();
         }
         return pageSize;
     }
@@ -564,6 +572,12 @@ public class DataList {
         } else if (customSize != null) {
             recordSize = customSize;
         }
+        
+        //allow MAXIMUM_PAGE_SIZE to return every record instead of 100000 previously
+        if (recordSize == -1) {
+            recordSize = null;
+        }
+        
         if (customStart != null) {
             start = customStart;
         } else if (page != null && page.trim().length() > 0 && recordSize != null) {
@@ -601,6 +615,16 @@ public class DataList {
 
         return param;
     }
+    
+    public boolean isUsingInboxBinder() {
+        if (isUsingInboxBinder == null) {
+            isUsingInboxBinder = false;
+            if (getBinder() instanceof DataListInboxBinder) {
+                isUsingInboxBinder = ((DataListInboxBinder) getBinder()).isInbox();
+            }
+        }
+        return isUsingInboxBinder;
+    }
 
     public DataListCollection getRows() {
         if (isReturnNoDataWhenFilterNotSet()) {
@@ -619,7 +643,12 @@ public class DataList {
                 //force get total before get rows to bypass additional filter
                 getTotal();
                 DataListQueryParam param = getQueryParam(customSize, customStart);
-                return getBinder().getData(this, getBinder().getProperties(), getFilterQueryObjects(), param.getSort(), param.getDesc(), param.getStart(), param.getSize());
+                
+                if (isUsingInboxBinder()) {
+                    return ((DataListInboxBinder) getBinder()).getInboxData(this, getBinder().getProperties(), getFilterQueryObjects(), param.getSort(), param.getDesc(), param.getStart(), param.getSize());
+                } else {
+                    return getBinder().getData(this, getBinder().getProperties(), getFilterQueryObjects(), param.getSort(), param.getDesc(), param.getStart(), param.getSize());
+                }
             }
         } catch (Exception e) {
             LogUtil.error(DataList.class.getName(), e, "Error retrieving binder rows");
@@ -640,7 +669,11 @@ public class DataList {
                     if (!isConsiderFilterWhenGetTotal()) {
                         getTotal();
                     }
-                    size = getBinder().getDataTotalRowCount(this, getBinder().getProperties(), getFilterQueryObjects());
+                    if (isUsingInboxBinder()) {
+                        size = ((DataListInboxBinder) getBinder()).getInboxDataTotalRowCount(this, getBinder().getProperties(), getFilterQueryObjects());
+                    } else {
+                        size = getBinder().getDataTotalRowCount(this, getBinder().getProperties(), getFilterQueryObjects());
+                    }
                 } else {
                     size = 0;
                 }
@@ -665,7 +698,11 @@ public class DataList {
             try {
                 if (getBinder() != null) {
                     filterQueryBuild = true;
-                    total = getBinder().getDataTotalRowCount(this, getBinder().getProperties(), getFilterQueryObjects());
+                    if (isUsingInboxBinder()) {
+                        total = ((DataListInboxBinder) getBinder()).getInboxDataTotalRowCount(this, getBinder().getProperties(), getFilterQueryObjects());
+                    } else {
+                        total = getBinder().getDataTotalRowCount(this, getBinder().getProperties(), getFilterQueryObjects());
+                    }
                     filterQueryBuild = false;
                 } else {
                     total = 0;
@@ -782,23 +819,25 @@ public class DataList {
                 String sessionKey = "session_" + getId() + "_" + getSessionKeyPrefix() + "_" + param;
                 HttpSession session = request.getSession(true);
 
-                if (values != null) {
-                    if (isAllowUpdateSession()) {
-                        String[] sessionValues = (String[]) session.getAttribute(sessionKey);
-                        if (!Arrays.equals(values, sessionValues) && (paramName.startsWith(PARAMETER_FILTER_PREFIX) || PARAMETER_PAGE_SIZE.equals(paramName))) {
-                            setResetSessionPageValue(true);
-                        }
+                if (session != null) {
+                    if (values != null) {
+                        if (isAllowUpdateSession()) {
+                            String[] sessionValues = (String[]) session.getAttribute(sessionKey);
+                            if (!Arrays.equals(values, sessionValues) && (paramName.startsWith(PARAMETER_FILTER_PREFIX) || PARAMETER_PAGE_SIZE.equals(paramName))) {
+                                setResetSessionPageValue(true);
+                            }
 
-                        if (isResetSessionPageValue() && TableTagParameters.PARAMETER_PAGE.equals(paramName)) {
-                            values[0] = "1";
-                        }
+                            if (isResetSessionPageValue() && TableTagParameters.PARAMETER_PAGE.equals(paramName)) {
+                                values[0] = "1";
+                            }
 
-                        session.setAttribute(sessionKey, values);
-                    }
-                } else {
-                    values = (String[]) session.getAttribute(sessionKey);
-                    if ((values != null && values.length > 0) && isAllowUpdateSession() && (TableTagParameters.PARAMETER_SORT.equals(paramName) || TableTagParameters.PARAMETER_ORDER.equals(paramName) || TableTagParameters.PARAMETER_PAGE.equals(paramName) || PARAMETER_PAGE_SIZE.equals(paramName))) {
-                        setReloadRequired(true);
+                            session.setAttribute(sessionKey, values);
+                        }
+                    } else {
+                        values = (String[]) session.getAttribute(sessionKey);
+                        if ((values != null && values.length > 0) && isAllowUpdateSession() && (TableTagParameters.PARAMETER_SORT.equals(paramName) || TableTagParameters.PARAMETER_ORDER.equals(paramName) || TableTagParameters.PARAMETER_PAGE.equals(paramName) || PARAMETER_PAGE_SIZE.equals(paramName))) {
+                            setReloadRequired(true);
+                        }
                     }
                 }
             }
@@ -879,6 +918,9 @@ public class DataList {
                             }
                         }
                     }
+                }
+                if (column instanceof DataListDisplayColumnProxy) {
+                    injectedHTML += ((DataListDisplayColumnProxy) column).getDisplayColumn().getInjectedHtml();
                 }
             }
         }
@@ -963,7 +1005,7 @@ public class DataList {
     }
 
     private String getPageSizeSelectorTemplate() {
-        String template = "<select id='" + getDataListEncodedParamName(PARAMETER_PAGE_SIZE) + "' name='" + getDataListEncodedParamName(PARAMETER_PAGE_SIZE) + "'>";
+        String template = "<select id='" + getDataListEncodedParamName(PARAMETER_PAGE_SIZE) + "' title='" + ResourceBundleUtil.getMessage("dbuilder.pageSizeSelectorOptions") +"' name='" + getDataListEncodedParamName(PARAMETER_PAGE_SIZE) + "'>";
         String value = getPageSize().toString();
             
         String[] list = getPageSizeList().split(",");

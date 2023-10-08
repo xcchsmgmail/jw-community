@@ -185,7 +185,7 @@ AppBuilder = {
             if (builder.value === "app") {
                 continue;
             }
-            var builderDiv = $('<div class="builder-type builder-'+builder.value+'" data-builder-type="'+builder.value+'"><div class="builder-title"><span class="icon" style="background: '+builder.color+'" ><i class="'+builder.icon+'"></i></span> '+builder.label+' <a class="addnew" data-builder-type="'+builder.value+'" title="'+get_cbuilder_msg("cbuilder.addnew")+'"><i class="las la-plus-circle"></i></a></div><div class="ul-wrapper"><ul></ul></div></div>');
+            var builderDiv = $('<div class="builder-type builder-'+builder.value+'" data-builder-type="'+builder.value+'"><div class="builder-title"><span class="icon" style="background: '+builder.color+'" ><i class="'+builder.icon+'"></i></span> '+builder.label+' <a class="addnew" data-builder-type="'+builder.value+'" title="'+get_cbuilder_msg("cbuilder.addnew")+'"><i class="las la-plus"></i></a></div><div class="ul-wrapper"><ul></ul></div></div>');
             if (builder.elements && builder.elements.length > 0) {
                 for (var j in builder.elements) {
                     var action = "";
@@ -339,10 +339,16 @@ AppBuilder = {
             $("#unpublish-btn").show();
             $("#publish-btn").hide();
             CustomBuilder.appPublished = "true";
+            $("#builderElementName .title .published").remove();
             $("#builderElementName .title").append('<small class="published">('+AppBuilder.msg('published')+')</small>');
         }
-        AppBuilder.reloadVersions();
-        AppBuilder.renderBuilders(CustomBuilder.builderItems);
+        
+        if (!isUnpublish && CustomBuilder.appVersion !== version) { //publish other version
+            CustomBuilder.ajaxRenderBuilder(CustomBuilder.contextPath+'/web/console/app/'+CustomBuilder.appId+'/'+version+'/builders');
+        } else {
+            AppBuilder.reloadVersions();
+            AppBuilder.renderBuilders(CustomBuilder.builderItems);
+        }
     },
     
     /*

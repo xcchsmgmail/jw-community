@@ -100,6 +100,18 @@
     max-width: 100%;
     float:none;
 }
+@media (max-width: 991px) and (min-width : 768px) {
+    .tablet-label-top > .label{
+        width: 100%;
+        float:none;
+    }
+    .tablet-label-top > label.label + *:not(.ui-screen-hidden),
+    .tablet-label-top > label.label + .ui-screen-hidden + *{
+        width: 100%;
+        max-width: 100%;
+        float:none;
+    }
+}
 .form-cell-highlight {
     padding-bottom: 0px;
     background: #f0ffcc;
@@ -128,7 +140,7 @@
 .form-cell table, .subform-cell table {
     width: 100%;
 }
-.form-cell table td, .form-cell table th, .subform-cell table td, .subform-cell table th {
+.form-cell table:not([class]) td, .form-cell table:not([class]) th, .subform-cell table:not([class]) td, .subform-cell table:not([class]) th {
     border: solid 1px silver;
     margin: 0px;
     padding: 3px;
@@ -194,6 +206,11 @@
     display: block;
     float: left;
     width: 50%;
+}
+.form-cell-value.fullWidth > label,
+.subform-cell-value.fullWidth > label{
+    width: auto;
+    float: unset;
 }
 .form-cell-full {
     width: 100%;
@@ -320,19 +337,22 @@ span.tablesaw-cell-content {
 /* date picker */
 .close-icon:after {
     content: "x";
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     position: absolute;
     text-align: center;
-    line-height: 15px;
+    line-height: 13px;
     margin-left: 10px;
-    top: 10px;
+    bottom: 20px;
     background-color: #FA9595;
     border-radius: 50%;
     color: white;
-    font-size: 15px;
+    font-size: 12px;
     box-shadow: 0 0 2px #E50F0F;
     cursor: pointer;
+}
+img.ui-datepicker-trigger {
+    pointer-events: none;
 }
 .datapicker-native.ui-screen-hidden{
     display: block;
@@ -342,6 +362,15 @@ span.tablesaw-cell-content {
     left: 15px;
     bottom: 0px;
 }
+body input.no-manual-input{
+    cursor: text;
+    background-color: #fff;
+}
+
+.trigger:hover, .close-icon:hover{
+    opacity: 0.8;
+}
+
 @media (max-width: 768px) {
     .datapicker-native.ui-screen-hidden.ios {
         right: 15px;

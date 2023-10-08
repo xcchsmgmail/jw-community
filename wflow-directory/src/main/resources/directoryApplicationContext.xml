@@ -33,11 +33,15 @@
                 <prop key="hibernate.format_sql">false</prop>
                 <prop key="hibernate.enable_lazy_load_no_trans">true</prop>
                 <prop key="hibernate.allow_update_outside_transaction">true</prop>
-                <prop key="hibernate.transaction.coordinator_class">jta</prop>
+                <prop key="hibernate.transaction.coordinator_class">jdbc</prop>
                 <prop key="hibernate.transaction.jta.platform">org.hibernate.service.jta.platform.internal.BitronixJtaPlatform</prop>
                 <prop key="hibernate.connection.release_mode">after_transaction</prop>
             </props>
         </property>
+    </bean>
+
+    <bean id="userMetaDataDao" class="org.joget.directory.dao.UserMetaDataDaoImpl">
+        <property name="sessionFactory" ref="directorySessionFactory" />
     </bean>
     
     <bean id="userDao" class="org.joget.directory.dao.UserDaoImpl">
@@ -45,6 +49,7 @@
         <property name="employmentDao" ref="employmentDao" />
         <property name="roleDao" ref="roleDao" />
         <property name="departmentDao" ref="departmentDao" />
+        <property name="userMetaDataDao" ref="userMetaDataDao" />
         <property name="sessionFactory" ref="directorySessionFactory" />
     </bean>
 
@@ -86,10 +91,6 @@
     </bean>
     
     <bean id="roleDao" class="org.joget.directory.dao.RoleDaoImpl">
-        <property name="sessionFactory" ref="directorySessionFactory" />
-    </bean>
-
-    <bean id="userMetaDataDao" class="org.joget.directory.dao.UserMetaDataDaoImpl">
         <property name="sessionFactory" ref="directorySessionFactory" />
     </bean>
     

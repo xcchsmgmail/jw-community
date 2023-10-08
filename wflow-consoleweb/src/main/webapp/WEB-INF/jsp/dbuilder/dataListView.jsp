@@ -1,14 +1,7 @@
-<%@ page import="org.joget.apps.app.service.MobileUtil"%>
 <%@ page import="org.joget.apps.app.service.AppUtil"%>
 <%@ page import="org.joget.commons.util.LogUtil"%>
 <%@ include file="/WEB-INF/jsp/includes/taglibs.jsp" %>
 <%@ taglib uri="http://displaytag.sf.net" prefix="display" %>
-
-<c:set var="mobileView" value="<%= MobileUtil.isMobileView() %>"/>
-<c:if test="${mobileView}">
-    <c:set scope="request" var="dataList" value="${dataList}"/>
-    <jsp:forward page="/WEB-INF/jsp/mobile/mDataListView.jsp"/>
-</c:if>
 
 <c:set scope="request" var="dataListId" value="${dataList.id}"/>
 
@@ -39,13 +32,13 @@
                         <c:when test="${actionResult.type == 'REDIRECT' && actionResult.url == 'REFERER'}">
                             <c:set var="redirected" value="true" />
                             <script>
-                                location.href = "<c:out value="${header['Referer']}"/>";
+                                location.href = "<ui:escape value="${header['Referer']}" format="javascript"/>";
                             </script>
                         </c:when>
                         <c:when test="${actionResult.type == 'REDIRECT'  && !empty actionResult.url}">
                             <c:set var="redirected" value="true" />
                             <script>
-                                location.href = "<c:out value="${actionResult.url}"/>";
+                                location.href = "<ui:escape value="${actionResult.url}" format="javascript"/>";
                             </script>
                         </c:when>
                         <c:otherwise>   
@@ -151,6 +144,12 @@
                                 </div>
                             </c:when>
                             <c:otherwise>
+                                <c:if test="${!empty dataList.properties.cardCollapsible && dataList.properties.cardCollapsible eq 'true'}">
+                                    <div class="collapsibleBtns" style="display:none">
+                                        <a class="expandAll"><i class="fas fa-plus-square"></i> <fmt:message key="dbuilder.expandAll"/></a>
+                                        <a class="collapseAll"><i class="fas fa-minus-square"></i> <fmt:message key="dbuilder.collapseAll"/></a>
+                                    </div>    
+                                </c:if>
                                 <div class="table-wrapper" data-disableresponsive="${dataList.disableResponsive}">
                                     <c:set var="tableStyle" value=""/>
                                     <c:if test="${!empty dataList.properties.draggabletable && dataList.properties.draggabletable eq 'true'}">
@@ -159,6 +158,13 @@
                                     <c:if test="${!empty dataList.properties.showhidecolumns && dataList.properties.showhidecolumns eq 'true'}">
                                         <c:set var="tableStyle" value="${tableStyle} showhidecolumns"/>
                                     </c:if>
+                                    <c:if test="${!empty dataList.properties.cardCollapsible && dataList.properties.cardCollapsible eq 'true'}">
+                                        <c:set var="tableStyle" value="${tableStyle} cardCollapsible"/>
+                                        
+                                        <c:if test="${!empty dataList.properties.cardCollapseByDefault && dataList.properties.cardCollapseByDefault eq 'true'}">
+                                            <c:set var="tableStyle" value="${tableStyle} cardCollapseByDefault"/>
+                                        </c:if>
+                                    </c:if>
                                    <display:table id="${dataListId}" uid="${dataListId}" name="dataListRows" pagesize="${dataListPageSize}" class="xrounded_shadowed responsivetable ${tableStyle}" export="true" decorator="decorator" excludedParams="${dataList.binder.primaryKeyColumnName}" requestURI="?" sort="external" partialList="true" size="dataListSize">
                                        <c:if test="${checkboxPosition eq 'left' || checkboxPosition eq 'both'}">
                                            <c:choose>
@@ -166,7 +172,8 @@
                                                    <display:column headerClass="select_radio" class="select_radio" property="radio" media="html" title="" />
                                                </c:when>
                                                <c:otherwise>
-                                                   <display:column headerClass="select_checkbox" class="select_checkbox" property="checkbox" media="html" title="<label><input type='checkbox' onclick='toggleAll(this)' style='float:left;'/><i></i></label>" />
+                                                   <fmt:message key="dbuilder.selectAll" var="selectAllLabel" />
+                                                   <display:column headerClass="select_checkbox" class="select_checkbox" property="checkbox" media="html" title="<label><input type='checkbox' title='${selectAllLabel}' onclick='toggleAll(this)' style='float:left;'/><i></i></label>" />
                                                </c:otherwise>
                                            </c:choose>
                                        </c:if>
@@ -208,15 +215,18 @@
                                                <c:choose>
                                                    <c:when test="${rowActionStatus.index == 0}">
                                                        <c:set var="actionTitle" value="${headerTitle}" />
-                                                       <c:set var="firstHeaderCssClass" value="rowaction_header header_${rowAction.properties.id} ${rowAction.properties.BUILDER_GENERATED_HEADER_CSS}" />
-                                                       <c:set var="firstBodyCssClass" value="rowaction_body body_${rowAction.properties.id} ${rowAction.properties.BUILDER_GENERATED_CSS}" />
+                                                       <c:set var="firstHeaderCssClass" value="rowaction_header footable-visible header_${rowAction.properties.id} ${rowAction.properties.BUILDER_GENERATED_HEADER_CSS}" />
+                                                       <c:set var="firstBodyCssClass" value="rowaction_body row_action_inner body_${rowAction.properties.id} ${rowAction.properties.BUILDER_GENERATED_CSS}" />
+                                                   </c:when>
+                                                   <c:when test="${rowActionStatus.last}">
+                                                       <c:set var="actionTitle" value="${actionTitle}</th><th class=\"row_action rowaction_header footable-last-column row_action_last footable-visible header_${rowAction.properties.id} ${rowAction.properties.BUILDER_GENERATED_HEADER_CSS}\">${headerTitle}" />
                                                    </c:when>
                                                    <c:otherwise>
-                                                       <c:set var="actionTitle" value="${actionTitle}</th><th class=\"row_action rowaction_header header_${rowAction.properties.id} ${rowAction.properties.BUILDER_GENERATED_HEADER_CSS}\">${headerTitle}" />
+                                                       <c:set var="actionTitle" value="${actionTitle}</th><th class=\"row_action rowaction_header footable-visible header_${rowAction.properties.id} ${rowAction.properties.BUILDER_GENERATED_HEADER_CSS}\">${headerTitle}" />
                                                    </c:otherwise>
                                                 </c:choose>
                                            </c:forEach>
-                                           <c:if test="${!empty dataList.properties.rowActionsMode && dataList.properties.rowActionsMode eq 'true'}">
+                                           <c:if test="${!empty dataList.properties.rowActionsMode && (dataList.properties.rowActionsMode eq 'true' || dataList.properties.rowActionsMode eq 'dropdown')}">
                                                <c:set var="actionTitle" value=""/>
                                                <c:set var="firstHeaderCssClass" value="rowaction_header"/>
                                                <c:set var="firstBodyCssClass" value="rowaction_body"/>
@@ -229,7 +239,8 @@
                                                    <display:column headerClass="select_radio" class="select_radio" property="radio" media="html" title="" />
                                                </c:when>
                                                <c:otherwise>
-                                                   <display:column headerClass="select_checkbox" class="select_checkbox" property="checkbox" media="html" title="<label><input type='checkbox' onclick='toggleAll(this)' style='float:left;'/><i></i></label>" />
+                                                   <fmt:message key="dbuilder.selectAll" var="selectAllLabel" />
+                                                   <display:column headerClass="select_checkbox" class="select_checkbox" property="checkbox" media="html" title="<label><input type='checkbox' title='${selectAllLabel}' onclick='toggleAll(this)' style='float:left;'/><i></i></label>" />
                                                </c:otherwise>
                                            </c:choose>
                                        </c:if>
@@ -297,7 +308,7 @@
 <script>
     DataListUtil = {
         submitForm: function(form) {
-            var params = $(form).serialize();
+            var params = UrlUtil.serializeForm($(form));
             var queryStr = window.location.search;
             params = params.replace(/\+/g, " ");
             var newUrl = UrlUtil.mergeRequestQueryString(queryStr, params);
@@ -314,6 +325,7 @@
         $('.mobile_search_trigger').off("click").on("click", function(){
             $("#filters_${dataListId}").toggleClass("show");
         });
+        $(".exportlinks a").attr("target", "_blank"); //download in new page so that it won't block access
         $("form[name='form_${dataListId}'] button").off("click");
         $("form[name='form_${dataListId}'] button").on("click", function(){
             var target = $(this).data("target");
@@ -397,6 +409,18 @@
                 }
             }
         });
+        
+        if('${checkboxPosition}' !== 'no'){
+            if('${selectionType}' === 'single'){
+                $("form[name='form_${dataListId}'] tbody .select_radio input[type='radio']").each(function() {
+                    $(this).attr('title', $(this).val());
+                });
+            }else{
+                $("form[name='form_${dataListId}'] tbody .select_checkbox input[type='checkbox']").each(function() {
+                    $(this).attr('title', $(this).val());
+                });
+            }
+        }
     });
     function toggleAll(element) {
         var table = $(element).closest("form");

@@ -48,6 +48,7 @@ import java.io.Writer;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.jar.JarEntry;
 import javax.servlet.http.HttpServletRequest;
 import org.apache.commons.collections.map.ListOrderedMap;
@@ -80,8 +81,10 @@ public class PluginManager implements ApplicationContextAware {
     private static ProfilePluginCache pluginCache = new ProfilePluginCache();
     private Set<String> blackList;
     private Set<String> scanPackageList;
+    protected Set<String> filesInProgress = new HashSet<String>(); //don't need to consider profile as the plugin for each profile having differrent absolute path
     
     public final static String ESCAPE_JAVASCRIPT = "javascript";
+    protected final static String COMPLETED = "COMPLETED::";
     
     private FileAlterationMonitor monitor = null;
     
@@ -233,7 +236,7 @@ public class PluginManager implements ApplicationContextAware {
                     }
                 };
                 
-                monitor = new FileAlterationMonitor(1000);
+                monitor = new FileAlterationMonitor(20000); //change to 20s
                 
                 if (!(new File(baseDirectory)).exists()) {
                     (new File(baseDirectory)).mkdirs();
@@ -258,7 +261,31 @@ public class PluginManager implements ApplicationContextAware {
     }
     
     protected void handleFileChange(File file) {
+        String fullFileName = null;
         try {
+            if (filesInProgress.contains(file.getAbsolutePath())) {
+                filesInProgress.remove(COMPLETED + file.getAbsolutePath()); //remove it just in case there is previous 1 did not remove.
+                
+                LogUtil.debug(PluginManager.class.getName(), "Plugin " + file.getName() + " detected. Skip it due to already in progress installing it.");
+                return;
+            }
+            if (filesInProgress.contains(COMPLETED + file.getAbsolutePath())) {
+                filesInProgress.remove(COMPLETED + file.getAbsolutePath());
+                LogUtil.debug(PluginManager.class.getName(), "Plugin " + file.getName() + " is just installed with upload feature. Skip it.");
+                return;
+            }
+            
+            fullFileName = file.getAbsolutePath();
+            LogUtil.debug(PluginManager.class.getName(), "Plugin " + fullFileName + " installing in progress.");
+            filesInProgress.add(fullFileName);
+            
+            // wait and check for file upload finish
+            long prevSize = 0;
+            do {
+                prevSize = file.length();
+                Thread.sleep(50);
+            } while (prevSize < file.length());
+            
             Bundle bundle = installBundle(file.toURI().toURL().toExternalForm());
             if (bundle != null) {
                 startBundle(bundle);
@@ -266,6 +293,11 @@ public class PluginManager implements ApplicationContextAware {
             }
         } catch (Exception e) {
             LogUtil.error(PluginManager.class.getName(), e, "");
+        } finally {
+            if (fullFileName != null) {
+                filesInProgress.remove(fullFileName);
+                LogUtil.debug(PluginManager.class.getName(), "Plugin " + fullFileName + " installing completed.");
+            }
         }
     }
     
@@ -338,7 +370,7 @@ public class PluginManager implements ApplicationContextAware {
                 newBundle = null;
             } else {
                 newBundle.update();
-            }           
+            }  
             // clear cache
             clearCache();
             return newBundle;
@@ -364,7 +396,7 @@ public class PluginManager implements ApplicationContextAware {
         }
     }
     
-    protected void clearCache() {
+    public void clearCache() {
         getCache().clearCache();
     }
 
@@ -373,6 +405,9 @@ public class PluginManager implements ApplicationContextAware {
             //bundle.update();
             bundle.start();
             LogUtil.info(PluginManager.class.getName(), "Bundle " + bundle.getSymbolicName() + " started");
+            
+            // clear cache
+            clearCache();
         } catch (Exception be) {
             LogUtil.error(PluginManager.class.getName(), be, "Failed bundle start for " + bundle + ": " + be.toString());
             return true;
@@ -560,6 +595,7 @@ public class PluginManager implements ApplicationContextAware {
         
         filename = SecurityUtil.normalizedFileName(filename);
         
+        String fullFileName = null;
         try {
             // check filename
             if (filename == null || filename.trim().length() == 0) {
@@ -590,6 +626,11 @@ public class PluginManager implements ApplicationContextAware {
                 if (!outputDir.exists()) {
                     outputDir.mkdirs();
                 }
+                
+                fullFileName = outputFile.getAbsolutePath();
+                LogUtil.debug(PluginManager.class.getName(), "Plugin " + fullFileName + " installing in progress.");
+                filesInProgress.add(fullFileName);
+                
                 out = new FileOutputStream(outputFile);
                 BufferedInputStream bin = new BufferedInputStream(in);
                 int len = 0;
@@ -676,6 +717,14 @@ public class PluginManager implements ApplicationContextAware {
         } catch (Exception ex) {
             LogUtil.error(PluginManager.class.getName(), ex, "");
             throw new PluginException("Unable to write plugin file", ex);
+        } finally {
+            if (fullFileName != null) {
+                filesInProgress.remove(fullFileName);
+                LogUtil.debug(PluginManager.class.getName(), "Plugin " + fullFileName + " installing completed.");
+                
+                //add to skip one observer file change
+                filesInProgress.add(COMPLETED + fullFileName);
+            }
         }
     }
     
@@ -1423,6 +1472,7 @@ public class PluginManager implements ApplicationContextAware {
         pluginTypeMap.put("org.joget.apps.datalist.model.DataListAction", ResourceBundleUtil.getMessage("setting.plugin.datalistAction"));
         pluginTypeMap.put("org.joget.apps.datalist.model.DataListBinder", ResourceBundleUtil.getMessage("setting.plugin.datalistBinder"));
         pluginTypeMap.put("org.joget.apps.datalist.model.DataListColumnFormat", ResourceBundleUtil.getMessage("setting.plugin.datalistColumnFormatter"));
+        pluginTypeMap.put("org.joget.apps.datalist.model.DataListDisplayColumn", ResourceBundleUtil.getMessage("setting.plugin.datalistDisplayColumn"));
         pluginTypeMap.put("org.joget.apps.datalist.model.DataListFilterType", ResourceBundleUtil.getMessage("setting.plugin.datalistFilterType"));
         pluginTypeMap.put("org.joget.apps.datalist.model.DataListTemplate", ResourceBundleUtil.getMessage("setting.plugin.dataListTemplate"));
         pluginTypeMap.put("org.joget.workflow.model.DeadlinePlugin", ResourceBundleUtil.getMessage("setting.plugin.deadline"));
@@ -1448,7 +1498,9 @@ public class PluginManager implements ApplicationContextAware {
         pluginTypeMap.put("org.joget.ai.TensorFlowPlugin", ResourceBundleUtil.getMessage("setting.plugin.TensorFlowPlugin"));
         pluginTypeMap.put("org.joget.workflow.model.DecisionPlugin", ResourceBundleUtil.getMessage("setting.plugin.DecisionPlugin"));
         pluginTypeMap.put("org.joget.governance.model.GovHealthCheckAbstract", ResourceBundleUtil.getMessage("setting.plugin.govHealthCheck"));
-        
+        pluginTypeMap.put("org.joget.plugin.base.PluginWebSocket", ResourceBundleUtil.getMessage("setting.plugin.webSocket"));
+        pluginTypeMap.put("org.joget.apps.app.model.CreateAppOption", ResourceBundleUtil.getMessage("setting.plugin.createAppOption"));
+       
         if (!getCache().getCustomPluginInterfaces().isEmpty()) {
             for (String className : getCache().getCustomPluginInterfaces().keySet()) {
                 CustomPluginInterface i = getCache().getCustomPluginInterfaces().get(className);

@@ -19,6 +19,7 @@ import org.joget.apps.form.model.FormRow;
 import org.joget.apps.form.model.FormRowSet;
 import org.joget.commons.util.FileManager;
 import org.joget.commons.util.SecurityUtil;
+import org.joget.commons.util.StringUtil;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -75,8 +76,9 @@ public class FileUtil implements ApplicationContextAware {
                         String[] paths = tempFilePathMap.get(fieldId);
                         
                         //if field id exist in deleteFilePath, do not need to update file name
+                        boolean replaceFile = false;
                         if (row.getDeleteFilePaths(fieldId) != null) {
-                            continue;
+                            replaceFile = true;
                         }
                         
                         List<String> newPaths = new ArrayList<String>();
@@ -88,16 +90,32 @@ public class FileUtil implements ApplicationContextAware {
                                     String fileName = file.getName();
                                     String uploadPath = getUploadPath(tableName, id);
 
-                                    String newFileName = validateFileName(fileName, uploadPath, existedFileName);
+                                    String newFileName = validateFileName(fileName, uploadPath, existedFileName, replaceFile);
                                     existedFileName.add(newFileName);
-
-                                    if (row.containsKey(fieldId)) {
-                                        String value = row.getProperty(fieldId);
-                                        value = value.replace(fileName, newFileName);
-                                        row.put(fieldId, value);
-                                    }
-
+                                    
                                     if (!newFileName.equals(file.getName())) {
+                                        if (row.containsKey(fieldId)) {
+                                            String value = row.getProperty(fieldId);
+                                            if (fileName.contains(";")) {
+                                                // When the file name has a ";", replace the first occurrence
+                                                value = value.replaceFirst(StringUtil.escapeRegex(fileName), StringUtil.escapeRegex(newFileName));
+                                            } else {
+                                                // First occurrence
+                                                int index = value.indexOf(fileName);
+                                                if (index != -1) {
+                                                    // Second occurrence
+                                                    index = value.indexOf(fileName, index + 1);
+                                                    if (index != -1) {
+                                                        value = value.substring(0, index) + newFileName + value.substring(index + fileName.length());
+                                                    } else {
+                                                        // When removeFile is false and the same file is added after it's deleted
+                                                        value = value.replaceFirst(StringUtil.escapeRegex(fileName), StringUtil.escapeRegex(newFileName));
+                                                    }
+                                                }
+                                            }
+                                            row.put(fieldId, value);
+                                        }
+                                        
                                         String newPath = path.replace(file.getName(), newFileName);
 
                                         file.renameTo(new File(file.getParentFile(), newFileName));
@@ -145,7 +163,18 @@ public class FileUtil implements ApplicationContextAware {
      * @return the new file name with number appended when duplicate file is found.
      */
     public static String validateFileName(String fileName, String path, Set<String> existedFileName) {
-        String tempPath = path + fileName;
+        return validateFileName(fileName, path, existedFileName, false);
+    }
+    
+    /**
+     * Validate the file name against the existing files in the target upload directory.
+     * @param fileName
+     * @param path
+     * @param existedFileName a set of file names which not yet exist in the target upload directory but the current checking file should not has the same file name in it.  
+     * @param replaceFile
+     * @return the new file name with number appended when duplicate file is found.
+     */
+    public static String validateFileName(String fileName, String path, Set<String> existedFileName, boolean replaceFile) {
         boolean fileExist = true;
         int count = 1;
         
@@ -155,19 +184,25 @@ public class FileUtil implements ApplicationContextAware {
             name = fileName.substring(0, fileName.lastIndexOf("."));
             ext = fileName.substring(fileName.lastIndexOf("."));
         }
+        if (name.contains(";")) {
+            name = name.replaceAll(StringUtil.escapeRegex(";"), "");
+        }
         fileName = name + ext;
+        String tempPath = path + fileName;
         
-        do {
-            File file = new File(tempPath);
-            
-            if (file.exists() || existedFileName.contains(fileName)) {
-                fileName = name + "("+count+")" + ext;
-                tempPath = path + fileName;
-            } else {
-                fileExist = false;
-            }
-            count ++;
-        } while (fileExist);
+        if (!replaceFile) {
+            do {
+                File file = new File(tempPath);
+
+                if (file.exists() || existedFileName.contains(fileName)) {
+                    fileName = name + "("+count+")" + ext;
+                    tempPath = path + fileName;
+                } else {
+                    fileExist = false;
+                }
+                count ++;
+            } while (fileExist);
+        }
         
         return fileName;
     }

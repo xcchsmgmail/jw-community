@@ -5,15 +5,14 @@ AjaxComponent = {
      * Intialize the content to found ajax supported component and event listening component
      */
     initAjax : function(element) {
-        AjaxComponent.currentUrlEventListening = [];
+        AjaxComponent.unbindEvents();
         $(element).find("[data-ajax-component], [data-ajax-component][data-events-triggering], [data-ajax-component][data-events-listening]").each(function() {
-            AjaxComponent.overrideLinkEvent($(this));
             AjaxComponent.initContent($(this));
         });
         
         setTimeout(function(){
             AjaxComponent.triggerPageLoadedEvent();
-            AjaxComponent.triggerEvents($("#content"), window.location.href, "get");
+            AjaxComponent.triggerEvents($("#content.page_content"), window.location.href, "get");
         }, 2);
         
         setTimeout(function(){
@@ -25,6 +24,7 @@ AjaxComponent = {
      * Override the behaviour of an AJAX supported component
      */
     initContent : function(element) {
+        AjaxComponent.overrideLinkEvent(element);
         setTimeout(function(){
             AjaxComponent.overrideButtonEvent(element);
             AjaxComponent.overrideDatalistButtonEvent(element);
@@ -150,14 +150,19 @@ AjaxComponent = {
                 var form = $(this);
                 //datalist filter form
                 if ($(form).hasClass("filter_form") && $(form).closest(".dataList").length > 0) {
-                     var params = $(form).serialize();
+                     var params = UrlUtil.serializeForm($(form));
                      var queryStr = window.location.search;
                      params = params.replace(/\+/g, " ");
                      var newUrl = window.location.pathname + "?" + UrlUtil.mergeRequestQueryString(queryStr, params);
                      AjaxComponent.call($(form), newUrl, "GET", null);
                 } else {
                      var formData = new FormData($(form)[0]);
-                     var btn = $(this).find(document.activeElement);
+                     var btn;
+                     if (e.originalEvent !== undefined && e.originalEvent.submitter !== undefined) {
+                        btn = $(e.originalEvent.submitter);
+                     } else {
+                        btn = $(this).find(document.activeElement);
+                     }
                      if (($(btn).length === 0 || !$(btn).is('input[type=submit], input[type=button], button, a')) && $(this).find("input[type=submit]:focus, input[type=button]:focus, button:focus").length === 0) {
                          btn = $(this).find("input[type='submit'][name], input[type='button'][name], button[name]").eq(0);
                      }
@@ -214,7 +219,7 @@ AjaxComponent = {
             $(".ma-backdrop").trigger("click.sidebar-toggled");
         }
         
-        if (!AjaxComponent.isCurrentUserviewUrl(url) || PwaUtil.isOnline === false) {
+        if (!AjaxComponent.isCurrentUserviewUrl(url) || PwaUtil.isOnline === false || AjaxComponent.isLanguageSwitching(url)) {
             window.top.location.href = url;
             return;
         }
@@ -228,7 +233,7 @@ AjaxComponent = {
         headers.append(ConnectionManager.tokenName, ConnectionManager.tokenValue);
         headers.append("__ajax_theme_loading", "true");
         
-        var contentConatiner = $("#content");
+        var contentConatiner = $("#content.page_content");
         
         if (AjaxComponent.isCurrentUserviewPage(url)) {
             if ($(element).closest("[data-ajax-component]").length > 0) {
@@ -260,6 +265,11 @@ AjaxComponent = {
                 return;
             }
         } else {
+            if (window['AjaxUniversalTheme'] === undefined) { 
+                window.top.location.href = url;
+                return;
+            }
+            
             AjaxComponent.unbindEvents();
         }
         
@@ -268,6 +278,10 @@ AjaxComponent = {
         var contentPlaceholder = $(element).data("ajax-content-placeholder");
         if (contentPlaceholder === undefined || contentPlaceholder === null || contentPlaceholder === "") {
             contentPlaceholder = AjaxComponent.getContentPlaceholder(url);
+            
+            if (contentPlaceholder === undefined || contentPlaceholder === null || contentPlaceholder === "") {
+                contentPlaceholder = $(contentConatiner).data("ajax-content-placeholder");
+            }
         }
         $(contentConatiner).attr("data-content-placeholder", contentPlaceholder);
         $(contentConatiner).removeAttr("aria-live");
@@ -347,6 +361,9 @@ AjaxComponent = {
                 if (response.url.indexOf("/web/login") !== -1) {
                     document.location.href = url;
                     return null;
+                } else if (AjaxComponent.isLanguageSwitching(response.url)) {    
+                    document.location.href = response.url;
+                    return null;
                 } else if ((method === "GET" || response.redirected) && response.status === 200) {
                     //only change url if is page change or main component
                     if (!isAjaxComponent || $(contentConatiner).hasClass("main-component")) {
@@ -362,24 +379,42 @@ AjaxComponent = {
                 if (data.indexOf("<html>") !== -1 && data.indexOf("</html>") !== -1) {
                     //handle userview redirection with alert
                     if (data.indexOf("<div") === -1) {
-                        var part = AjaxComponent.getMsgAndRedirectUrl(data.substring(data.indexOf("alert")));
+                        var part = AjaxComponent.getMsgAndRedirectUrl(data);
                         if (part[0] !== "") {
                             alert(part[0]);
                         }
-
-                        //if redirect url is not same with current userview page
-                        if (!AjaxComponent.isCurrentUserviewPage(part[1])) {
-                            AjaxComponent.call($("#content"), part[1], "GET", null);
-                        } else {
-                            AjaxComponent.triggerEvents(contentConatiner, url, method);
-                            AjaxComponent.call(contentConatiner, part[1], "GET", null);
+                        if (part[2] === null) { //if no target winder, use current window
+                            //if redirect url is not same with current userview page
+                            if (!AjaxComponent.isCurrentUserviewPage(part[1])) {
+                                AjaxComponent.call($("#content.page_content"), part[1], "GET", null);
+                            } else {
+                                AjaxComponent.triggerEvents(contentConatiner, url, method);
+                                AjaxComponent.call(contentConatiner, part[1], "GET", null);
+                            }
+                        } else { //if target is top or parent window
+                            var win = part[2];
+                            if (part[1] === "") { // it is a reload when url is empty
+                                part[1] = win.location.href;
+                            }
+                            if(win["AjaxComponent"]){ //use ajax component to reload/redirect if exist
+                                if (part[1].indexOf("embed=false") !== -1) { //remove embed false url
+                                    part[1] = part[1].replace("embed=false", "");
+                                }
+                                win["AjaxComponent"].call($("#content.page_content", win["document"]), part[1], "GET", null);
+                            } else {
+                                win.location.href = part[1];
+                            }
+                            part[3] = true; //if the target is parent or top, always close popup if exist
+                        }
+                        if (part[3] === true && parent.PopupDialog) { 
+                            parent.PopupDialog.closeDialog();
                         }
                         return;
                     }
                 }
 
-                if (!isAjaxComponent && AjaxUniversalTheme !== undefined) {
-                    AjaxUniversalTheme.callback(data);
+                if (!isAjaxComponent && window['AjaxUniversalTheme'] !== undefined) {
+                    window['AjaxUniversalTheme'].callback(data);
                 } else {
                     AjaxComponent.callback(contentConatiner, data, url);
                 }
@@ -399,8 +434,8 @@ AjaxComponent = {
             }
         })
         .catch(function (error) {
-            if (!isAjaxComponent && AjaxUniversalTheme !== undefined) {
-                AjaxUniversalTheme.errorCallback(error);
+            if (!isAjaxComponent && window['AjaxUniversalTheme'] !== undefined) {
+                window['AjaxUniversalTheme'].errorCallback(error);
             } else {
                 AjaxComponent.errorCallback(element, error);
             }
@@ -685,15 +720,15 @@ AjaxComponent = {
             }
             $(element).attr("aria-live", "polite");
         } else if (action === "reloadPage") {
-            if (AjaxUniversalTheme !== undefined) {
-                AjaxComponent.call($("#content"), window.location.href, "GET", null);
+            if (window['AjaxUniversalTheme'] !== undefined) {
+                AjaxComponent.call($("#content.page_content"), window.location.href, "GET", null);
             } else {
                 window.location.reload(true);
             }
         } else if (action === "redirectPage") {
             var url = AjaxComponent.getEventRedirectURL(eventObj.redirectUrl, urlParams);
-            if (AjaxUniversalTheme !== undefined) {
-               AjaxComponent.call($("#content"), url, "GET", null);
+            if (window['AjaxUniversalTheme'] !== undefined) {
+               AjaxComponent.call($("#content.page_content"), url, "GET", null);
             } else {
                 window.location.href = url;
             }
@@ -715,6 +750,7 @@ AjaxComponent = {
         for (var i in AjaxComponent.currentUrlEventListening) {
             $("body").off(AjaxComponent.currentUrlEventListening[i]);
         }
+        AjaxComponent.currentUrlEventListening = [];
     },
     
     /*
@@ -810,6 +846,22 @@ AjaxComponent = {
     },
     
     /*
+     * Check is language switching using parameter
+     */
+    isLanguageSwitching : function(url) {
+        if (url !== null && url !== undefined && url.indexOf("_lang=") !== -1) {
+            var params = UrlUtil.getUrlParams(url);
+            var lang = params['_lang'][0];
+            
+            if (UI.locale !== lang) {
+                return true;
+            }
+        }
+        
+        return false;
+    },
+    
+    /*
      * Check the URL is same userview menu
      */
     isCurrentUserviewPage : function(url) {
@@ -838,19 +890,45 @@ AjaxComponent = {
     },
     
     /*
-     * Extract out the alert message and redirect URL from HTML
+     * Extract out the alert message, redirect URL, target window & close popup flag from HTML
      */
-    getMsgAndRedirectUrl : function(content) {
-        var part = content.indexOf(".location") > 0?content.split(".location"):content.split("location.");
-        var msg = "";
-        if (content.indexOf("alert") !== -1) {
-            msg = part[0].match(/(['"])((?:\\\1|(?:(?!\1).))+)\1/g)[0];
-            msg = msg.substring(1, msg.length - 1);
+    getMsgAndRedirectUrl: function(content) {
+        //get script
+        var index = content.indexOf("<script");
+        if (index !== -1) {
+            content = content.substring(content.indexOf(">", index) + 1, content.indexOf("</script>", index));
         }
-        var url = part[1].match(/(['"])((?:\\\1|(?:(?!\1).))+)\1/g)[0];
-        url = url.substring(1, url.length - 1);
         
-        return [msg, url];
+        //split the content to get alert message and redirect url
+        var part = content.indexOf(".location") > 0 ? content.split(".location") : content.split("location.");
+        var regex = new RegExp(/(['"])((?:\\\1|(?:(?!\1).))+)\1/g); //regex to extract string between " or ' char
+        var msg = "";
+        var url = "";
+        var target = null;
+        var closePopup = false;
+        if (content.indexOf("alert") !== -1) {
+            if (regex.test(part[0])) {
+                msg = part[0].match(regex)[0];
+                msg = msg.substring(1, msg.length - 1);
+            }
+        }
+        if (regex.test(part[1])) {
+            url = part[1].match(regex)[0];
+            url = url.substring(1, url.length - 1);
+        }
+        
+        //check redirection target
+        if (content.indexOf("top.window.location") !== -1 || content.indexOf("top.location") !== -1) {
+            target = top;
+        } else if (content.indexOf("parent.window.location") !== -1 || content.indexOf("parent.location") !== -1) {
+            target = parent;
+        }
+        
+        //check is there a script to close popup dialog
+        if (content.indexOf("parent.PopupDialog.closeDialog();") !== -1) {
+            closePopup = true;
+        }
+        return [msg, url, target, closePopup];
     },
     
     /*

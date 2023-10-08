@@ -26,7 +26,7 @@
         <c:forEach items="${categories}" var="category">
             CustomBuilder.createPaletteCategory('<c:out value='${fn:replace(category, "\'", "\\\\\'")}' escapeXml='false'/>');
         </c:forEach>
-        CustomBuilder.createPaletteCategory('<ui:msgEscJS key="ubuilder.pageComponents"/>');    
+        CustomBuilder.createPaletteCategory('<ui:msgEscJS key="ubuilder.pageComponents"/>', "", "page_components_palette");    
         <c:forEach items="${pageComponent}" var="element">
             <c:set var="category" value=""/>
             <c:set var="pwaValidation" value=""/>
@@ -36,7 +36,7 @@
             <c:if test="${empty propertyOptions}">
                 <c:set var="propertyOptions" value="''"/>
             </c:if>
-            <c:if test="${element.isMenu()}">
+            <c:if test="${element.isUiMenu()}">
                 <c:set var="type" value="menu"/>   
                 <c:set var="pwaValidation" value="'pwaValidation' : '${element.pwaValidationType}', "/>    
                 <c:set var="category" value='${category};${fn:replace(element.category, "\'", "\\\\\'")}'/>
@@ -118,6 +118,7 @@
                 "load" : "UserviewBuilder.load",
                 "saveEditProperties" : "UserviewBuilder.saveEditProperties",
                 "getBuilderProperties" : "UserviewBuilder.getBuilderProperties",
+                "getBuilderItemName" : "UserviewBuilder.getBuilderItemName",
                 "saveBuilderProperties" : "UserviewBuilder.saveBuilderProperties",
                 "getRuleObject" : "UserviewBuilder.getRuleObject",
                 "previewViewInit" : "UserviewBuilder.previewViewInit",

@@ -93,6 +93,15 @@
             parent.AjaxMenusCount.init();
         }
     };
+    win.xadmin.validateUrl = function(url) {
+        var currentURL = window.location.href;
+        // if same userview page, only same userview page can open in xadmin tab.
+        // please refer to XadminTheme.java line 676 & xadmin.redirect
+        if (url.indexOf(currentURL.substring(currentURL.indexOf("/web/userview"), currentURL.lastIndexOf("/") + 1)) !== -1) { 
+            return true;
+        }
+        return false;
+    };
 
     PopupDialog.prototype.show = function() {
         var newSrc = this.src;
@@ -222,6 +231,28 @@
         $('#bigFont').click(function () {
             setFontSize("20");
             setCookie("20");
+        });
+        
+        $(document).off("click.dropdown", "[data-toggle=\"dropdown\"]");
+        $(document).on("click.dropdown", "[data-toggle=\"dropdown\"]", function(){
+            var dropdown = $(this);
+            $(document).off("click.dropdownclose");
+            $(dropdown).toggleClass("focus");
+            
+            $(document).find("[data-toggle=\"dropdown\"]").each(function(){
+               if (!$(this).is(dropdown)) {
+                   $(this).removeClass("focus");
+               }
+            });
+            
+            if ($(this).hasClass("focus")) {
+                $(document).on("click.dropdownclose", function(e){
+                    if (!$(dropdown).is(e.target) && $(dropdown).has(e.target).length === 0) {
+                        $(dropdown).removeClass("focus");
+                        $(document).off("click.dropdownclose");
+                    }
+                });
+            }
         });
     });
     

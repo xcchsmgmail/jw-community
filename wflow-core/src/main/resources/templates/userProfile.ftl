@@ -2,7 +2,6 @@
     .userProfile-body-content .userProfile-body-header {
         clear:both;
         color:#000000;
-        font-family:Georgia,"Times New Roman",Times,serif;
         font-size:1.4em;
         font-style:normal;
         font-variant:normal;
@@ -40,6 +39,10 @@
         padding:0.25em;
         text-align:left;
     }
+
+    body.rtl .form-row label, body.rtl .form-row .form-input{
+        text-align: right;
+    }
 </style>
 <#if element.properties.isPreview! == 'true' >
     <script>
@@ -52,7 +55,11 @@
     <div class="userProfile-body-header">
         ${element.properties.headerTitle!}
     </div>
-    <#if element.properties.view! == 'redirect'>
+    <#if element.properties.view! == 'reloadAfterSaved'>
+        <script>
+            top.location.href = "${element.properties.redirectURL!}";
+        </script>
+    <#elseif element.properties.view! == 'redirect'>
         <script>
             <#if element.properties.message?? >
                 alert('${element.properties.message!}');
@@ -154,6 +161,14 @@
                         </span>
                     </div>
                 </#if>
+
+                <div id="dateFormatUseEnglish_field" class="form-row" style="display:none" data-nonwestern="${element.properties.nonWesternDigitLocale!}">
+                    <label for="field1">@@userview.userprofilemenu.field.dateFormatUseEnglish@@</label>
+                    <span class="form-input">
+                        <input type="checkbox" id="dateFormatUseEnglish" name="dateFormatUseEnglish" value="true" disabled <#if 'true' == element.properties.dateFormatUseEnglish!>checked</#if>/>
+                    </span>
+                </div>
+
             </fieldset>
             <#if element.properties.f_password! != 'hide'>
                 <fieldset>
@@ -219,6 +234,38 @@
                     alert(alertString);
                 }
             }
+
+            // show/hide the field based on current locale and the chosen locale
+            function updateWesternDigitDateField() {
+                var locale = "";
+                if ($("#locale").length > 0) {
+                    locale = $("#locale").val();
+                }
+                if (locale === "") {
+                    locale = "DEFAULT";
+                }
+                
+                var nonWesternDigit = $("#dateFormatUseEnglish_field").data("nonwestern").split(";");
+                
+                if ($.inArray(locale, nonWesternDigit) !== -1) {
+                    $("#dateFormatUseEnglish_field").show();
+                    $("#dateFormatUseEnglish").prop("disabled", false);
+                } else {
+                    $("#dateFormatUseEnglish_field").hide();
+                    $("#dateFormatUseEnglish").prop("disabled", true);
+                }
+            }
+
+            $(function(){
+                updateWesternDigitDateField();
+
+                if ($("#locale").length > 0) {
+                    $("#locale").off("change.westernDigitDateField");
+                    $("#locale").on("change.westernDigitDateField", function(){
+                        updateWesternDigitDateField();
+                    });
+                }
+            });
         </script>
     <#else>
         <p>

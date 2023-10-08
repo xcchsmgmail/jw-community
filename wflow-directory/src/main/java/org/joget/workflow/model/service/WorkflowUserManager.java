@@ -9,6 +9,7 @@ import org.joget.directory.model.Role;
 import org.joget.directory.model.User;
 import org.joget.directory.model.service.DirectoryManager;
 import org.joget.directory.model.service.DirectoryUtil;
+import org.joget.directory.model.service.ExtUserDetails;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
@@ -23,6 +24,7 @@ public class WorkflowUserManager {
     
     public static final String ROLE_ANONYMOUS = "roleAnonymous";
     public static final String ROLE_ADMIN = "ROLE_ADMIN";
+    public static final String ROLE_USER = "ROLE_USER";
 
     private ThreadLocal currentThreadUser = new ThreadLocal();
     private ThreadLocal currentThreadUserRoles = new ThreadLocal();
@@ -141,8 +143,10 @@ public class WorkflowUserManager {
                             for (Role role : roles) {
                                 results.add(role.getId());
                             }
-                            currentThreadUserRoles.set(results);
+                        } else {
+                            results.add(ROLE_USER);
                         }
+                        currentThreadUserRoles.set(results);
                     }
                     return user;
                 }
@@ -163,6 +167,10 @@ public class WorkflowUserManager {
         }
         if (userObj instanceof String) {
             setCurrentThreadUser((String) userObj);
+            return getCurrentUser();
+        } else if (userObj instanceof ExtUserDetails && 
+                ((ExtUserDetails) userObj).getUser() != null) {
+            setCurrentThreadUser(((ExtUserDetails) userObj).getUser());
             return getCurrentUser();
         } else if (userObj instanceof UserDetails) {
             UserDetails userDetails = (UserDetails) userObj;
@@ -216,6 +224,9 @@ public class WorkflowUserManager {
                     for (GrantedAuthority ga: authorities) {
                         results.add(ga.getAuthority());
                     }
+                }
+                if (results.isEmpty()) {
+                    results.add(ROLE_USER);
                 }
             }
             currentThreadUserRoles.set(results);

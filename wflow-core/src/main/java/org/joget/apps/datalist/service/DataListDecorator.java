@@ -19,8 +19,10 @@ import org.displaytag.properties.MediaTypeEnum;
 import org.displaytag.tags.TableTagParameters;
 import org.joget.apps.datalist.model.DataList;
 import org.joget.apps.datalist.model.DataListAction;
+import org.joget.apps.datalist.model.DataListDisplayColumnProxy;
 import org.joget.apps.datalist.model.DataListColumn;
 import org.joget.apps.datalist.model.DataListColumnFormat;
+import org.joget.commons.util.ResourceBundleUtil;
 import org.joget.commons.util.SecurityUtil;
 import org.joget.commons.util.StringUtil;
 import org.joget.workflow.util.WorkflowUtil;
@@ -160,21 +162,39 @@ public class DataListDecorator extends CheckboxTableDecorator {
             for (DataListAction action : actions) {
                 String link = generateLink(action);
                 
-                if ("true".equals(dataList.getPropertyString("rowActionsMode"))) {
+                if ("true".equals(dataList.getPropertyString("rowActionsMode")) || "dropdown".equals(dataList.getPropertyString("rowActionsMode"))) {
                     if (!link.isEmpty()) {
                         output += " <span class=\"row_action rowaction_body body_"+action.getPropertyString("id")+" " + action.getPropertyString("BUILDER_GENERATED_CSS") + "\">" + link + "</span> ";
                     }
                 } else {
                     if (i > 0) {
-                        output += "</td><td class=\"row_action rowaction_body body_"+action.getPropertyString("id")+" " + action.getPropertyString("BUILDER_GENERATED_CSS") + "\">";
+                        String lastClass = "";
+                        if (i == actions.length - 1) {
+                            lastClass = "footable-last-column row_action_last";
+                        }
+                        output += "</td><td class=\"row_action rowaction_body "+lastClass+" body_"+action.getPropertyString("id")+" " + action.getPropertyString("BUILDER_GENERATED_CSS") + "\">";
                     }
                     
-                    output += " " + link + " ";
+                    output += " <span class=\"row_action_inner\">" + link + "</span> ";
                 }
                 
                 i++;
             }
         }
+        
+        if ("dropdown".equals(dataList.getPropertyString("rowActionsMode")) && !output.isEmpty()) {
+            String btnStyle = actions[0].getPropertyString("link-css-display-type");
+            if (btnStyle.isEmpty()) {
+                btnStyle = "btn btn-sm btn-primary";
+            }
+            String label = dataList.getPropertyString("rowActionsDropdownLabel");
+            if (label.isEmpty()) {
+                label = ResourceBundleUtil.getMessage("dbuilder.rowActionsDropdownLabel.default");
+            }
+            output = output.replaceAll(StringUtil.escapeRegex("btn btn-sm btn-"), StringUtil.escapeRegex("xbtn xbtn-sm xbtn-")); //remove btn style
+            output = "<div class=\"dropdown rowActionsDropdown\"><a data-toggle=\"dropdown\" class=\""+btnStyle+"\" href=\"javascript:;\">"+label+" <i class=\"fas fa-chevron-down\"></i></a><div class=\"dropdown-menu dropdown-menu-left rowActions\">"+output+"</div></div>";
+        }
+        
         return output;
     }
     
@@ -232,6 +252,7 @@ public class DataListDecorator extends CheckboxTableDecorator {
         String link = href;
         String targetString = "";
         String confirmationString = "";
+        String arialLabel= "";
 
         if (link == null || text == null || text.isEmpty()) {
             link = text;
@@ -311,13 +332,20 @@ public class DataListDecorator extends CheckboxTableDecorator {
                     confirmationString = " onclick=\"return confirm('" + StringUtil.escapeString(confirmation, StringUtil.TYPE_JAVASCIPT, null) + "')\"";
                 }
             }
-            link = "<a href=\"" + link + "\"" + targetString + confirmationString + " class=\""+cssClasses+"\">" + text + "</a>";
-        }
+            if (StringUtil.stripAllHtmlTag(text).isEmpty()) {
+                arialLabel = " aria-label=\"link\"";
+            }
+            link = "<a href=\"" + link + "\"" + targetString + confirmationString + arialLabel + " class=\""+cssClasses+"\">" + text + "</a>";
+            }
         return link;
     }
 
     public String formatColumn(DataListColumn column, Object row, Object value) {
         Object result = value;
+        
+        if (column instanceof DataListDisplayColumnProxy) {
+            result = ((DataListDisplayColumnProxy) column).getRowValue(row, getViewIndex());
+        }
         
         // decrypt protected data 
         if (result != null && result instanceof String) {

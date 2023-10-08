@@ -13,6 +13,7 @@
     builderType: '',
     builderLabel: '',
     id: '',
+    isViewerWithPE: false, //is current viewer using properties editor for other purpose
     config : {},
     defaultConfig: {
         builder : {
@@ -26,6 +27,7 @@
                 load : "",
                 saveEditProperties : "",
                 cancelEditProperties : "",
+                getBuilderItemName : "",
                 getBuilderProperties : "",
                 saveBuilderProperties : ""
             }
@@ -147,6 +149,8 @@
     builderItems : null,
     builderItemsLoading : [],
     
+    builderShortcutActionHandlers : {},
+    
     /*
      * Utility method to call a function by name
      */
@@ -179,7 +183,29 @@
         }
     },
     
+    /* 
+     * to show an overlay and error message when app is not found
+     */
+    renderAppNotExist: function(appId) {
+        $("body").removeClass("initializing");
+        appId = UI.escapeHTML(appId);
+        
+        //add a overlay with message, add it to quick nav so that it get removed together when navigate to other app
+        $("#builder-quick-nav #builder-menu ul #appNotExist").remove();
+        $("#builder-quick-nav #builder-menu ul").append('<li id="appNotExist"><div class="error">'+get_cbuilder_msg('abuilder.appNotExist', [appId])+'</div></li>');
+        
+        var url = CustomBuilder.contextPath+'/web/console/app/'+appId+'/0/builders';
+        //change the browser URL, so the next import can redirect correctly.
+        history.pushState({url: url}, "", url);
+    },
+    
     ajaxRenderBuilder: function(url) {
+        $("#builder-quick-nav #builder-menu ul #appNotExist").hide();
+        
+        var rtl;
+        if($('body').hasClass('rtl')){
+           rtl=true;
+        }
         //check url is same
         var temp = url;
         var hash = ""
@@ -238,6 +264,16 @@
                 document.location.href = url;
                 redirect = true;
                 return false;
+            } else if (response.url.indexOf("/web/console/home") !== -1) {
+                var appId = "";
+                if (url.indexOf("/web/console/app/") !== -1) {
+                    appId = url.substring(url.indexOf("/web/console/app/") + 17);
+                    appId = appId.substring(0, appId.indexOf("/"));
+                }
+                //app not exist
+                CustomBuilder.renderAppNotExist(appId);
+                redirect = true;
+                return false;
             } else {
                 history.pushState({url: response.url+hash}, "", response.url+hash); //handled redirected URL
                 return response.text();
@@ -286,6 +322,8 @@
                 CustomBuilder.loadJson($("#cbuilder-json").val());
                 CustomBuilder.intBuilderMenu();
             } else {
+                CustomBuilder.unbindBuilderShortcutActionHandlers();
+                
                 CustomBuilder.callback(CustomBuilder.config.builder.callbacks["unloadBuilder"], []);
                 
                 CustomBuilder.removeVisibilityChangeEvent("paste");
@@ -343,7 +381,9 @@
                     $("head").append(data.builderJS);
                 }
             }
-            
+            if(rtl === true) {
+                $('body').addClass("rtl");
+            }
             //update admin bar
             var acBtn = $("#adminBarButtons .adminBarButton").eq(0);
             $(acBtn).attr("href", CustomBuilder.contextPath + '/web/console/app'+ CustomBuilder.appPath +'/builders');
@@ -430,10 +470,13 @@
             $("#preview-btn").hide();
         }
         
-        if (CustomBuilder.config.builder.options['rightPropertyPanel'] === true) {
-            $("body").addClass("property-editor-right-panel");
+        $("body").addClass("property-editor-right-panel");
+        
+        //use for old builder implementation like api builder & report builder
+        if (CustomBuilder.config.builder.options['rightPropertyPanel'] !== true) { 
+            $("body").addClass("property-editor-migrated");
         } else {
-            $("body").removeClass("property-editor-right-panel");
+            $("body").removeClass("property-editor-migrated");
         }
         
         if (CustomBuilder.getBuilderSetting("autoApplyChanges") === true) {
@@ -451,6 +494,14 @@
             $("#expand-all-props-btn").show();
             $("#collapse-all-props-btn").hide();
         }
+        
+        if (CustomBuilder.getBuilderSetting("right-panel-mode") === "window" 
+                || (CustomBuilder.getBuilderSetting("right-panel-mode") === undefined && CustomBuilder.config.builder.options['rightPropertyPanel'] !== true)) {
+            $("body").addClass("right-panel-mode-window");
+        } else {
+            $("body").removeClass("right-panel-mode-window");
+        }
+        CustomBuilder.adjustPropertyPanelSize();
         
 //        var builderMode = $.localStorage.getItem("builderMode");
 //        if (builderMode === undefined || builderMode === null || builderMode === "" || !(builderMode === "mode-basic" || builderMode === "mode-advanced")) {
@@ -492,6 +543,11 @@
             $(document).uitooltip({
                 position: { my: "left top+5", at: "left bottom", collision: "flipfit" },
                 open: function (event, ui) {
+                    $(".ui-tooltip").each(function(){
+                       if (!($(this).is($(ui.tooltip)))) {
+                           $(this).remove(); //remove the other tooltips that fail to hide itself.
+                       } 
+                    });
                     if ($(event.originalEvent.target).is("iframe")) {
                         $(ui.tooltip).hide();
                         return false;
@@ -503,9 +559,20 @@
                         $(ui.tooltip).css("left", (offset.left + el.width() + 5) + "px");
                         $(ui.tooltip).css("top", (offset.top + 5) + "px");
                     }
+                    
+                    if (CustomBuilder.tooltipTimeout !== undefined && CustomBuilder.tooltipTimeout !== null) {
+                        clearTimeout(CustomBuilder.tooltipTimeout);
+                    }
+                    CustomBuilder.tooltipTimeout = setTimeout(function() {
+                        $(".ui-tooltip").remove();
+                        CustomBuilder.tooltipTimeout = null;
+                    }, 2000); //force tooltip to remove after 2s
                 },
                 close: function (event, ui) {
                     $(".ui-helper-hidden-accessible").remove();
+                    if (CustomBuilder.tooltipTimeout !== undefined && CustomBuilder.tooltipTimeout !== null) {
+                        clearTimeout(CustomBuilder.tooltipTimeout);
+                    }
                 } 
             });
             
@@ -531,6 +598,9 @@
             container = "body";
         }
         
+        jQuery.hotkeys.options.filterInputAcceptingElements = false;
+        jQuery.hotkeys.options.filterTextInputs = false;
+        
         $(container).find("[data-cbuilder-action]").each(function () {
             var on = "click";
             var target = $(this);
@@ -549,8 +619,15 @@
                 if ($("#quick-nav-bar").hasClass("active")) {
                    $("#closeQuickNav").trigger("click");
                 }
+                
+                var isShortcut = event.type === "keydown";
                 if ($(target).is(":visible") && !$(target).hasClass("disabled")) {
-                    action.call(this, event);
+                    var result = action.call(this, event);
+                    if (result) {
+                        return result;
+                    }
+                } else if (isShortcut) {
+                    return; //let default shortcut key handler to proceed
                 }
                 return false;
             };
@@ -558,14 +635,34 @@
             $(this).on(on, buttonAction);
             if (this.dataset.cbuilderShortcut)
             {
-                $(document).unbind('keydown.shortcut', this.dataset.cbuilderShortcut);
-                $(document).bind('keydown.shortcut', this.dataset.cbuilderShortcut, buttonAction);
+                if (CustomBuilder.builderShortcutActionHandlers[this.dataset.cbuilderShortcut] !== undefined) {
+                    $(document).unbind('keydown.shortcut', CustomBuilder.builderShortcutActionHandlers[this.dataset.cbuilderShortcut]);
+                    if (window.FrameDocument) {
+                        $(window.FrameDocument).unbind('keydown.shortcut', CustomBuilder.builderShortcutActionHandlers[this.dataset.cbuilderShortcut]);
+                    }
+                    delete CustomBuilder.builderShortcutActionHandlers[this.dataset.cbuilderShortcut];
+                }
+                
+                CustomBuilder.builderShortcutActionHandlers[this.dataset.cbuilderShortcut] = buttonAction;
+                $(document).on('keydown.shortcut', null, this.dataset.cbuilderShortcut, buttonAction);
                 if (window.FrameDocument) {
-                    $(window.FrameDocument).unbind('keydown.shortcut', this.dataset.cbuilderShortcut);
-                    $(window.FrameDocument).bind('keydown.shortcut', this.dataset.cbuilderShortcut, buttonAction);
+                    $(window.FrameDocument).on('keydown.shortcut', null, this.dataset.cbuilderShortcut, buttonAction);
                 }
             }
         });
+    },
+    
+    unbindBuilderShortcutActionHandlers : function() {
+        for (var i in CustomBuilder.builderShortcutActionHandlers) {
+            if (CustomBuilder.builderShortcutActionHandlers.hasOwnProperty(i)) {
+                $(document).unbind('keydown.shortcut', CustomBuilder.builderShortcutActionHandlers[i]);
+                if (window.FrameDocument) {
+                    $(window.FrameDocument).unbind('keydown.shortcut', CustomBuilder.builderShortcutActionHandlers[i]);
+                }
+            }
+        }
+        
+        CustomBuilder.builderShortcutActionHandlers = {};
     },
     
     /*
@@ -664,6 +761,22 @@
             return CustomBuilder.callback(CustomBuilder.config.builder.callbacks["getBuilderProperties"], []);
         } else {
             return CustomBuilder.data.properties;
+        }
+    },
+    
+    /*
+     * Retrieve the builder item name
+     */
+    getBuilderItemName : function() {
+        if (CustomBuilder.config.builder.callbacks["getBuilderItemName"] !== "") {
+            return CustomBuilder.callback(CustomBuilder.config.builder.callbacks["getBuilderItemName"], []);
+        } else {
+            var props = CustomBuilder.getBuilderProperties();
+            if (props) {
+                return props['name'];
+            } else {
+                return null;
+            }
         }
     },
     
@@ -799,26 +912,34 @@
                 var categoryId = CustomBuilder.createPaletteCategory(category, tab);
                 var container = $('#'+ tab + '_comphead_' + categoryId + '_list');
                 var eid = categoryId+"_"+className.replace(/\./g, "_");
-                var li = $('<li class="'+licss+'"><div id="'+eid+'" element-class="'+className+'" class="builder-palette-element '+css+'"> <a href="#">'+UI.escapeHTML(label)+'</a></div><i class="lar la-star"></i></li>');
+                var li = $('<li class="'+licss+'"><div id="'+eid+'" element-class="'+className+'" class="builder-palette-element '+css+'"> <a>'+UI.escapeHTML(label)+'</a></div><i class="lar la-star"></i></li>');
                 $(li).find('.builder-palette-element').prepend($(iconObj).clone());
                 $(container).append(li);
             }
         }
+        CustomBuilder.updatePaletteFav();
     },
     
     /*
      * Check a palette element is in fav list and flag it
      */
     updatePaletteFav : function() {
-        var list = CustomBuilder.getBuilderSetting("paletteFavList");
-        if (list !== undefined && list !== null) {
-            for (var i in list) {
-                var div = $("li div#"+list[i]);
-                if ($(div).length > 0) {
-                    $(div).parent().addClass("fav");
+        if (CustomBuilder.updatePaletteFavTimeout !== undefined && CustomBuilder.updatePaletteFavTimeout !== null) {
+            clearTimeout(CustomBuilder.updatePaletteFavTimeout);
+        }
+        
+        CustomBuilder.updatePaletteFavTimeout = setTimeout(function() {
+            var list = CustomBuilder.getBuilderSetting("paletteFavList");
+            if (list !== undefined && list !== null) {
+                for (var i in list) {
+                    var div = $("li div#"+list[i]);
+                    if ($(div).length > 0) {
+                        $(div).parent().addClass("fav");
+                    }
                 }
             }
-        }
+            CustomBuilder.updatePaletteFavTimeout = null;
+        }, 300);    
     },
     
     /*
@@ -834,7 +955,7 @@
         if ($(li).hasClass("fav")) {
             $(li).removeClass("fav");
             if ($.inArray(id, list) !== -1) {
-                list = list.splice( $.inArray(id, list), 1);
+                list.splice( $.inArray(id, list), 1);
             }
         } else {
             $(li).addClass("fav");
@@ -848,9 +969,13 @@
     /*
      * Add palette category to tab
      */
-    createPaletteCategory : function(category, tab) {
+    createPaletteCategory : function(category, tab, cssClass) {
         if (tab === undefined || tab === "") {
             tab = "components";
+        }
+        
+        if (cssClass === undefined || cssClass === null) {
+            cssClass = "";
         }
         
         var categoryId = "default";
@@ -864,7 +989,7 @@
         }
         var list = $("#"+tab + " .components-list");
         if ($('#'+ tab + '_comphead_' + categoryId + '_list').length === 0) {
-            list.append('<li class="header clearfix" data-section="' + tab + '-' + categoryId + '"  data-search=""><label class="header" for="' + tab + '_comphead_' + categoryId + '">' + category + '  <div class="la la-angle-down header-arrow"></div>\
+            list.append('<li class="header clearfix '+cssClass+'" data-section="' + tab + '-' + categoryId + '"  data-search=""><label class="header" for="' + tab + '_comphead_' + categoryId + '">' + category + '  <div class="la la-angle-down header-arrow"></div>\
                             </label><input class="header_check" type="checkbox" checked="true" id="' + tab + '_comphead_' + categoryId + '">  <ol id="' + tab + '_comphead_' + categoryId + '_list"></ol></li>');
         }
         return categoryId;
@@ -921,10 +1046,29 @@
      * Load and render the JSON data to canvas
      */
     loadJson : function(json, addToUndo) {
-        CustomBuilder.json = json;
         try {
             CustomBuilder.data = JSON.decode(json);
         } catch (e) {}
+        
+        //when addToUndo is set to true, the new json need to update and keep a record in undo
+        if (addToUndo === true) {
+            //make sure the builder id is not change
+            var props = CustomBuilder.getBuilderProperties();
+            if (props !== undefined && props !== null) {
+                //if props not having id and it can be found in CustomBuilder.data.properties. Note: this is to handle UI builder
+                if (props.id === undefined && CustomBuilder.data.properties !== undefined && CustomBuilder.data.properties.id !== undefined) {
+                    props = CustomBuilder.data.properties;
+                }
+                //check if id is changed
+                if (props.id !== CustomBuilder.id) {
+                    props.id = CustomBuilder.id; //reset it
+                }
+            }
+        
+            CustomBuilder.update(addToUndo);
+        } else {
+            CustomBuilder.json = json;
+        }
         
         //callback to render json
         CustomBuilder.callback(CustomBuilder.config.builder.callbacks["load"], [CustomBuilder.data]);
@@ -990,9 +1134,14 @@
                 var d = JSON.decode(data);
                 if(d.success == true){
                     $("#save-btn").removeClass("unsaved");
-                    $('#cbuilder-json-original').val(json);
+                    CustomBuilder.savedJson = json;
+                    $('#cbuilder-json-original').val(d.data);
                     CustomBuilder.updateSaveStatus("0");
                     CustomBuilder.showMessage(get_cbuilder_msg('ubuilder.saved'), "success");
+                    
+                    if (d.properties !== undefined && d.properties !== null) {
+                        CustomBuilder.config.builder.properties = $.extend(true, CustomBuilder.config.builder.properties, d.properties);
+                    }
 
                     CustomBuilder.callback(CustomBuilder.config.builder.callbacks["builderSaved"]);
                 }else{
@@ -1000,6 +1149,20 @@
 
                     CustomBuilder.callback(CustomBuilder.config.builder.callbacks["builderSaveFailed"]);
                 }
+                
+                //check builder name change
+                var name = CustomBuilder.getBuilderItemName();
+                if ((name !== null && $("#builderElementName .title span.item_name").text() !== name) || (name === null && CustomBuilder.builderType === "process")) {
+                    if (name !== null) {
+                        $("#builderElementName .title span.item_name").text(name);
+
+                        $("head title").text(CustomBuilder.builderLabel + " : " + name);
+                    }
+                    
+                    //reload nav
+                    CustomBuilder.reloadBuilderMenu();
+                }
+        
                 setTimeout(function(){
                     $("#save-btn").removeAttr("disabled");
                 }, 3000);
@@ -1027,7 +1190,7 @@
     updateFromJson: function() {
         var json = $('#cbuilder-json').val();
         if (CustomBuilder.getJson() !== json) {
-            CustomBuilder.loadJson(json);
+            CustomBuilder.loadJson(json, true); //need to save a copy in undo
         }
         return false;
     },
@@ -1168,6 +1331,18 @@
     },
     
     /*
+     * Remove copied element and clear clipboard
+     */
+    clearCopiedElement : function() {
+        var data = CustomBuilder.getCopiedElement();
+        if (data) {
+            $.localStorage.removeItem("customBuilder_"+CustomBuilder.builderType+".copyTime");
+            $.localStorage.removeItem("customBuilder_"+CustomBuilder.builderType+".copy");
+            $("#paste-element-btn").addClass("disabled");
+        }
+    },
+    
+    /*
      * Retrieve copied element in cache
      */
     getCopiedElement : function() {
@@ -1195,6 +1370,8 @@
         
         $.localStorage.setItem("customBuilder_"+CustomBuilder.builderType+".copy", JSON.encode(copy));
         $.localStorage.setItem("customBuilder_"+CustomBuilder.builderType+".copyTime", new Date());
+        CustomBuilder.copyTextToClipboard(" ", false); //to clear the clipboard
+        $.localStorage.removeItem("customBuilder.copiedText");
         
         CustomBuilder.showMessage(get_cbuilder_msg('ubuilder.copied'), "info");
     },
@@ -1219,6 +1396,30 @@
             type = copied['type'];
         }
         CustomBuilder.updatePasteIcon(type);
+    },
+    
+    /*
+     * Copy text to clipboard, option to clear the element clipboard.
+     */
+    copyTextToClipboard : function(text, clearElementClipboard) {
+        var $temp = $("<input style='height:1px;opacity:0'>");
+        $("body").append($temp);
+        $temp.val(text).select();
+        document.execCommand("copy");
+        $temp.remove(); 
+        
+        $.localStorage.setItem("customBuilder.copiedText", text);
+        
+        if (clearElementClipboard) {
+            CustomBuilder.clearCopiedElement();
+        }
+    },
+    
+    /*
+     * Retrieve copied text in cache
+     */
+    getCopiedText : function() {
+        return $.localStorage.getItem("customBuilder.copiedText");
     },
     
     /*
@@ -1264,6 +1465,11 @@
      * Merge the diff between local and remote
      */
     merge: function (callback) {
+        if (CustomBuilder.config.builder.callbacks["builderBeforeMerge"] !== undefined &&
+                CustomBuilder.config.builder.callbacks["builderBeforeMerge"] !== "") {
+            CustomBuilder.callback(CustomBuilder.config.builder.callbacks["builderBeforeMerge"]);
+        }
+        
         // get current remote definition
         CustomBuilder.showMessage(get_cbuilder_msg('ubuilder.merging'));
         var thisObject = CustomBuilder;
@@ -1286,8 +1492,26 @@
     /*
      * Merge remote change and save
      */
-    mergeAndSave: function() {
-        if ($("body").hasClass("property-editor-right-panel") && !$("body").hasClass("no-right-panel")) {
+    mergeAndSave: function(event) {
+        if ($("body").hasClass("properties-builder-view")) {
+            var editor = $("#propertiesView .builder-view-body").data("editor");
+            if (editor !== undefined && editor.isChange()) {
+                if (editor.options.orgSaveCallback === undefined || editor.options.orgSaveCallback === null) {
+                    editor.options.orgSaveCallback = editor.options.saveCallback;
+                    editor.options.saveCallback = function(container, properties) {
+                        editor.options.orgSaveCallback(container, properties);
+                        $("#save-btn").attr("disabled", "disabled");
+                        CustomBuilder.merge(CustomBuilder.save);
+                    };
+                }
+                editor.save();
+                editor.options.saveCallback = editor.options.orgSaveCallback;
+                editor.options.orgSaveCallback = null;
+            } else {
+                $("#save-btn").attr("disabled", "disabled");
+                CustomBuilder.merge(CustomBuilder.save);
+            }
+        } else if ($("body").hasClass("property-editor-right-panel") && !$("body").hasClass("no-right-panel")) {
             CustomBuilder.checkChangeBeforeCloseElementProperties(function(){
                 $("#save-btn").attr("disabled", "disabled");
                 $("body").addClass("no-right-panel");
@@ -1296,6 +1520,12 @@
         } else {
             $("#save-btn").attr("disabled", "disabled");
             CustomBuilder.merge(CustomBuilder.save);
+        }
+        
+        if (event) {
+            //to stop browser save dialog
+            event.preventDefault();
+            return false;
         }
     }, 
     
@@ -1366,6 +1596,19 @@
      * Edit an element properties in right panel or popup dialog
      */
     editProperties: function(elementClass, elementProperty, elementObj, element) {
+        if ($("body").hasClass("property-editor-migrated")) {
+            if (!$("body").hasClass("no-right-panel")) {
+                CustomBuilder.checkChangeBeforeCloseElementProperties(function(hasChange) {
+                    $("body").addClass("no-right-panel");
+                    CustomBuilder.editProperties(elementClass, elementProperty, elementObj, element);
+                });   
+                return;
+            } else {
+                $("body").removeClass("no-right-panel");
+                $("#right-panel .property-editor-container").remove();
+            }
+        }
+        
         $(".element-properties .nav-tabs .nav-link").removeClass("has-properties-errors");
         
         var paletteElement = CustomBuilder.paletteElements[elementClass];
@@ -1438,14 +1681,14 @@
             };
             
             $("#right-panel #element-properties-tab").propertyEditor(options);
-            if ($("body").hasClass("max-property-editor")) {
+            if ($("body").hasClass("max-property-editor") || $("body").hasClass("right-panel-mode-window")) {
                 CustomBuilder.adjustPropertyPanelSize();
             }
             
             if (CustomBuilder.getBuilderSetting("expandProps") === true) {
                 $("#right-panel .property-editor-container > .property-editor-pages > .property-editor-page ").removeClass("collapsed");
             }
-        
+            
             $("#element-properties-tab-link").show();
         } else {
             // show popup dialog
@@ -1466,7 +1709,7 @@
         
         var deferreds = [];
                         
-        $(".element-properties .property-editor-container").each(function() {
+        $(".element-properties .tab-pane > .property-editor-container").each(function() {
             var d = $.Deferred();
             deferreds.push(d);
             $(this).data("deferred", d);
@@ -1509,9 +1752,17 @@
                 
                 var newPropertiesJson = JSON.encode(elementProperty);
                 if (oldPropertiesJson !== newPropertiesJson) {
-                    CustomBuilder.callback(CustomBuilder.config.builder.callbacks["saveEditProperties"], [container, elementProperty, elementObj, element]);
+                    if ($(element).is('[data-cbuilder-style-id]')) {
+                        var style = $(element).next('[data-cbuilder-style]');
+                        $(element).append(style);
+                        $(element).removeAttr("data-cbuilder-style-id");
+                    }
                     
-                    if ($("body").hasClass("default-builder")) {
+                    if (CustomBuilder.isViewerWithPE === undefined || CustomBuilder.isViewerWithPE === false) {
+                        CustomBuilder.callback(CustomBuilder.config.builder.callbacks["saveEditProperties"], [container, elementProperty, elementObj, element]);
+                    }
+                    
+                    if ($("body").hasClass("default-builder") || CustomBuilder.isViewerWithPE) {
                         var updateDeferreds = [];
                         var dummy = $.Deferred();
                         updateDeferreds.push(dummy);
@@ -1536,6 +1787,13 @@
                         callback();
                     }
                 }
+                
+                //close the properties editor if it is window mode
+                if ($("body").hasClass("right-panel-mode-window")) {
+                    $("body").addClass("no-right-panel");
+                    $("#right-panel .property-editor-container").remove();
+                }
+                
             } else {
                 CustomBuilder.showMessage(get_cbuilder_msg("cbuilder.pleaseCorrectErrors"), "danger");
             }
@@ -1654,12 +1912,12 @@
         $("body").addClass("right-panel-resizing");
         
         var stopResize = function() {
-            $("body").off("mousemove.resize touchmove.resize");
-            $("body").off("mouseup.resize touchend.resize");
+            $("body").off("mousemove.rpresize touchmove.rpresize");
+            $("body").off("mouseup.rpresize touchend.rpresize");
             
             if ($("body").hasClass("default-builder")) {
-                CustomBuilder.Builder.frameHtml.off("mousemove.resize touchmove.resize");
-                CustomBuilder.Builder.frameHtml.off("mouseup.resize touchend.resize");
+                CustomBuilder.Builder.frameHtml.off("mousemove.rpresize touchmove.rpresize");
+                CustomBuilder.Builder.frameHtml.off("mouseup.rpresize touchend.rpresize");
             }
             $(panel).removeClass("resizing");
             $("body").removeClass("right-panel-resizing");
@@ -1690,18 +1948,182 @@
         };
         
         if ($("body").hasClass("default-builder")) {
-            CustomBuilder.Builder.frameHtml.off("mousemove.resize touchmove.resize");
-            CustomBuilder.Builder.frameHtml.off("mouseup.resize touchend.resize");
+            CustomBuilder.Builder.frameHtml.off("mousemove.rpresize touchmove.rpresize");
+            CustomBuilder.Builder.frameHtml.off("mouseup.rpresize touchend.rpresize");
             
-            CustomBuilder.Builder.frameHtml.on("mousemove.resize touchmove.resize", resize);
-            CustomBuilder.Builder.frameHtml.on("mouseup.resize touchend.resize", stopResize);
+            CustomBuilder.Builder.frameHtml.on("mousemove.rpresize touchmove.rpresize", resize);
+            CustomBuilder.Builder.frameHtml.on("mouseup.rpresize touchend.rpresize", stopResize);
         }
         
-        $("body").off("mousemove.resize touchmove.resize");
-        $("body").off("mouseup.resize touchend.resize");
+        $("body").off("mousemove.rpresize touchmove.rpresize");
+        $("body").off("mouseup.rpresize touchend.rpresize");
         
-        $("body").on("mousemove.resize touchmove.resize", resize);
-        $("body").on("mouseup.resize touchend.resize", stopResize);
+        $("body").on("mousemove.rpresize touchmove.rpresize", resize);
+        $("body").on("mouseup.rpresize touchend.rpresize", stopResize);
+    },
+    
+    /*
+     * Resize builder right panel window
+     */
+    resizeRightPanelWindow : function(event) {
+        var button = $(this);
+        var panel = $("#right-panel");
+        $(panel).addClass("resizing");
+        $("body").addClass("right-panel-resizing");
+        
+        var stopResize = function() {
+            $("body").off("mousemove.rpwresize touchmove.rpwresize");
+            $("body").off("mouseup.rpwresize touchend.rpwresize");
+            
+            if ($("body").hasClass("default-builder")) {
+                CustomBuilder.Builder.frameHtml.off("mousemove.rpwresize touchmove.rpwresize");
+                CustomBuilder.Builder.frameHtml.off("mouseup.rpwresize touchend.rpwresize");
+            }
+            $(panel).removeClass("resizing");
+            $("body").removeClass("right-panel-resizing");
+        };
+        
+        var resize = function(e) {
+            var x = e.clientX;
+            if (e.originalEvent) {
+                x = e.originalEvent.clientX;
+            }
+            if (e.type === "touchmove") {
+                x = e.touches[0].clientX;
+                if (e.touches[0].originalEvent) {
+                    x= e.touches[0].originalEvent.clientX;
+                }
+            }
+            if (!$(e.currentTarget).is("#cbuilder")) {
+                x += $(CustomBuilder.Builder.iframe).offset().left;
+            }
+            
+            var y = e.clientY;
+            if (e.originalEvent) {
+                y = e.originalEvent.clientY;
+            }
+            if (e.type === "touchmove") {
+                y = e.touches[0].clientY;
+                if (e.touches[0].originalEvent) {
+                    y= e.touches[0].originalEvent.clientY;
+                }
+            }
+            if (!$(e.currentTarget).is("#cbuilder")) {
+                y += $(CustomBuilder.Builder.iframe).offset().top;
+            }
+            
+            var top = $(panel).offset().top;
+            var left = $(panel).offset().left;
+            
+            var newWidth = x - left + 5;
+            var newHeight = y - top + 5;
+            
+            if (newWidth < 150) {
+                newWidth = 150;
+            }
+            if (newHeight < 300) {
+                newHeight = 300;
+            }
+            
+            CustomBuilder.setBuilderSetting("right-panel-window-width", newWidth);
+            CustomBuilder.setBuilderSetting("right-panel-window-height", newHeight);
+            
+            CustomBuilder.adjustPropertyPanelSize();
+        };
+        
+        if ($("body").hasClass("default-builder")) {
+            CustomBuilder.Builder.frameHtml.off("mousemove.rpwresize touchmove.rpwresize");
+            CustomBuilder.Builder.frameHtml.off("mouseup.rpwresize touchend.rpwresize");
+            
+            CustomBuilder.Builder.frameHtml.on("mousemove.rpwresize touchmove.rpwresize", resize);
+            CustomBuilder.Builder.frameHtml.on("mouseup.rpwresize touchend.rpwresize", stopResize);
+        }
+        
+        $("body").off("mousemove.rpwresize touchmove.rpwresize");
+        $("body").off("mouseup.rpwresize touchend.rpwresize");
+        
+        $("body").on("mousemove.rpwresize touchmove.rpwresize", resize);
+        $("body").on("mouseup.rpwresize touchend.rpwresize", stopResize);
+    },
+    
+    /*
+     * Move builder right panel window
+     */
+    moveRightPanelWindow : function(event) {
+        var button = $(this);
+        var panel = $("#right-panel");
+        $(panel).addClass("resizing");
+        $("body").addClass("right-panel-resizing");
+        
+        var stopMove = function() {
+            $("body").off("mousemove.rpwmove touchmove.rpwmove");
+            $("body").off("mouseup.rpwmove touchend.rpwmove");
+            
+            if ($("body").hasClass("default-builder")) {
+                CustomBuilder.Builder.frameHtml.off("mousemove.rpwmove touchmove.rpwmove");
+                CustomBuilder.Builder.frameHtml.off("mouseup.rpwmove touchend.rpwmove");
+            }
+            $(panel).removeClass("resizing");
+            $("body").removeClass("right-panel-resizing");
+        };
+        
+        var move = function(e) {
+            var x = e.clientX;
+            if (e.originalEvent) {
+                x = e.originalEvent.clientX;
+            }
+            if (e.type === "touchmove") {
+                x = e.touches[0].clientX;
+                if (e.touches[0].originalEvent) {
+                    x= e.touches[0].originalEvent.clientX;
+                }
+            }
+            if (!$(e.currentTarget).is("#cbuilder")) {
+                x += $(CustomBuilder.Builder.iframe).offset().left;
+            }
+            if (x < 60) {
+                x = 60;
+            }
+            
+            var y = e.clientY;
+            if (e.originalEvent) {
+                y = e.originalEvent.clientY;
+            }
+            if (e.type === "touchmove") {
+                y = e.touches[0].clientY;
+                if (e.touches[0].originalEvent) {
+                    y= e.touches[0].originalEvent.clientY;
+                }
+            }
+            if (!$(e.currentTarget).is("#cbuilder")) {
+                y += $(CustomBuilder.Builder.iframe).offset().top;
+            }
+            if (y < 60) {
+                y = 60;
+            }
+            
+            var newTop = y - 20;
+            var newLeft = x - 20;
+            
+            CustomBuilder.setBuilderSetting("right-panel-window-top", newTop);
+            CustomBuilder.setBuilderSetting("right-panel-window-left", newLeft);
+     
+            CustomBuilder.adjustPropertyPanelSize();
+        };
+        
+        if ($("body").hasClass("default-builder")) {
+            CustomBuilder.Builder.frameHtml.off("mousemove.rpwmove touchmove.rpwmove");
+            CustomBuilder.Builder.frameHtml.off("mouseup.rpwmove touchend.rpwmove");
+            
+            CustomBuilder.Builder.frameHtml.on("mousemove.rpwmove touchmove.rpwmove", move);
+            CustomBuilder.Builder.frameHtml.on("mouseup.rpwmove touchend.rpwmove", stopMove);
+        }
+        
+        $("body").off("mousemove.rpwmove touchmove.rpwmove");
+        $("body").off("mouseup.rpwmove touchend.rpwmove");
+        
+        $("body").on("mousemove.rpwmove touchmove.rpwmove", move);
+        $("body").on("mouseup.rpwmove touchend.rpwmove", stopMove);
     },
     
     /*
@@ -1818,6 +2240,9 @@
         iframe.onload = function() {
             $(view).find('.dt-loading').remove();
             $(iframe).css('opacity', "1");
+            
+            iframe.contentWindow["UI"].base = CustomBuilder.contextPath;
+            iframe.contentWindow["UI"].userview_app_id = CustomBuilder.appId;
         }; 
         
         var viewport = $(".responsive-buttons button.active").data("view");
@@ -1887,6 +2312,7 @@
      * Show the permission editor view, called by switchView method
      */
     permissionViewInit : function(view) {
+        CustomBuilder.isViewerWithPE = true;
         CustomBuilder.Builder.selectedElBeforePermission = CustomBuilder.Builder.selectedEl;
         
         $("body").addClass("no-right-panel");
@@ -1910,9 +2336,10 @@
      * Run before permission editor dismiss, called by switchView method
      */
     permissionViewBeforeClosed : function(view) {
+        CustomBuilder.isViewerWithPE = false;
         CustomBuilder.Builder.selectedEl = null;
         
-        if (CustomBuilder.Builder.selectedElBeforePermission !== null) {
+        if (CustomBuilder.Builder.selectedElBeforePermission !== null && CustomBuilder.Builder.selectedElBeforePermission !== undefined) {
             CustomBuilder.Builder.selectNode(CustomBuilder.Builder.selectedElBeforePermission);
         }
         
@@ -2137,7 +2564,7 @@
                     I18nEditor.renderTable($(view), labels, config);
                     I18nEditor.refresh($(view));
                     
-                    $(view).find(".i18n_table tbody").prepend('<tr class="even addnew"><td class="label"><a class="addNewKey btn btn-primary btn-sm"><i class="las la-plus-circle"></i> '+get_cbuilder_msg('abuilder.addNewKey')+'</a></td><td class="lang1"></td><td class="lang2"></td></tr>');
+                    $(view).find(".i18n_table tbody").prepend('<tr class="even addnew"><td class="label"><a class="addNewKey btn btn-primary btn-sm"><i class="las la-plus"></i> '+get_cbuilder_msg('abuilder.addNewKey')+'</a></td><td class="lang1"></td><td class="lang2"></td></tr>');
                     $(view).find(".i18n_table .addNewKey").on("click", function(){
                         CustomBuilder.appMessageAddNewKey($(this));
                     });
@@ -2278,7 +2705,7 @@
         }
         $(".responsive-buttons button").removeClass("active");
         $(".responsive-buttons button#"+view+"-view").addClass("active");
-	$("body, #builder_canvas, #previewView").removeClass("mobile tablet desktop").addClass(view);
+	$("body, #builder_canvas, #previewView").removeClass("mobile tablet desktop noviewport").addClass(view);
         
         //for builder
         $("#element-highlight-box, #element-select-box").hide();
@@ -2294,6 +2721,49 @@
         $("body").addClass("max-property-editor");
         
         var width = CustomBuilder.getBuilderSetting("right-panel-width");
+        if ($("body").hasClass("right-panel-mode-window")) {
+            width = CustomBuilder.getBuilderSetting("right-panel-window-width");
+            if (isNaN(width)) { //if width is not defined, set it to 80% of window width
+                width = $(window).width() * 0.8;
+            }
+            if (width < 150) {
+                width = 150;
+            } else if (width > ($(window).width() * 0.95)) {
+                width = $(window).width() * 0.95;
+            }
+            
+            //set top, left & height too
+            var top = CustomBuilder.getBuilderSetting("right-panel-window-top");
+            if (isNaN(top)) { //if top is not defined, set it to 10% of window height
+                top = $(window).height() * 0.1;
+            }
+            
+            var left = CustomBuilder.getBuilderSetting("right-panel-window-left");
+            if (isNaN(left)) { //if top is not defined, set it to 10% of window height
+                left = $(window).width() * 0.1;
+            }
+            
+            var height = CustomBuilder.getBuilderSetting("right-panel-window-height");
+            if (isNaN(height)) { //if top is not defined, set it to 80% of window height
+                height = $(window).height() * 0.8;
+            }
+            if (height < ($(window).height() * 0.4)) {
+                height = $(window).height() * 0.4;
+            } else if (height > ($(window).height() * 0.90)) {
+                height = $(window).height() * 0.90;
+            }
+            
+            $("#right-panel").css("top", top+"px");
+            $("#right-panel").css("left", left+"px");
+            $("#right-panel").css("height", height+"px");
+        } else {
+            //remove top, left, height, width
+            $("#right-panel").css("top", "");
+            $("#right-panel").css("left", "");
+            $("#right-panel").css("height", "");
+            $("#right-panel").css("width", "");
+        }
+        
         if (!isNaN(width)) {
             var winWidth = $("body").width() - 60;
             if (width > winWidth) {
@@ -2301,13 +2771,15 @@
             }
             $("#right-panel").css("width", width + 'px');
         } else {
-            width = $("#right-panel").width();
+            try {
+                width = parseInt($("#right-panel").css("min-width").replace("px", ""));
+            } catch (e){}
         }
         
         if (width > 680) {
-            $("#right-panel .property-editor-container").addClass("wider");
+            $("#right-panel, #right-panel .property-editor-container").addClass("wider");
         } else {
-            $("#right-panel .property-editor-container").removeClass("wider");
+            $("#right-panel, #right-panel .property-editor-container").removeClass("wider");
         }
     },
     
@@ -2318,6 +2790,26 @@
         CustomBuilder.checkChangeBeforeCloseElementProperties(function(){
             $("body").addClass("no-right-panel");
         });
+    },
+    
+    /*
+     * Show the right panel as window
+     */
+    maxPropertiesWindow : function() {
+        $("body").addClass("right-panel-mode-window");
+        CustomBuilder.setBuilderSetting("right-panel-mode", "window");
+        
+        CustomBuilder.adjustPropertyPanelSize();
+    },
+    
+    /*
+     * Restore the right panel from window
+     */
+    dockPropertiesWindow : function() {
+        $("body").removeClass("right-panel-mode-window");
+        CustomBuilder.setBuilderSetting("right-panel-mode", "");
+        
+        CustomBuilder.adjustPropertyPanelSize();
     },
     
     /*
@@ -2370,7 +2862,7 @@
                                     return false;
                                 }
                             } else if ($(this).is('.tinymce')) {
-                                var value = tinyMCE.editors[$(this).attr('id')].getContent();
+                                var value = tinymce.get($(this).attr('id')).getContent();
                                 if (CustomBuilder.isSearchMatch(value, searchText)) {
                                     show = true;
                                     return false;
@@ -2466,7 +2958,15 @@
     /*
      * Method used for toolbar to copy an element
      */
-    copyElement : function() {
+    copyElement : function(event) {
+        if (event && ((/textarea|input|select/i.test(event.target.nodeName) && event.target.selectionStart !== event.target.selectionEnd) || 
+                (window.getSelection && window.getSelection() !== undefined && window.getSelection() !== null && 
+                window.getSelection().anchorNode !== undefined && window.getSelection().anchorNode !== null &&
+                window.getSelection().anchorNode.nodeName === "#text" && window.getSelection().toString().length > 0))) {
+            //clear element clipboard
+            CustomBuilder.clearCopiedElement();
+            return true; //to continue to the default handler to copy text
+        }
         if (CustomBuilder.Builder.selectedEl !== null) {
             CustomBuilder.Builder.copyNode();
         }
@@ -2475,8 +2975,37 @@
     /*
      * Method used for toolbar to paste an element
      */
-    pasteElement : function() {
-        CustomBuilder.Builder.pasteNode();
+    pasteElement : function(event) {
+        if (event && /textarea|input|select/i.test(event.target.nodeName)) {
+            if (CustomBuilder.getCopiedElement() === null) {
+                return true; //to continue to the default handler to paste text
+            } else {
+                try {
+                    navigator.clipboard.readText().then(clipText => {
+                        if (clipText === undefined || clipText === null ||
+                                clipText === "" || clipText.trim().length === 0 || 
+                                clipText === CustomBuilder.getCopiedText()) {
+                            CustomBuilder.Builder.pasteNode();
+                        } else {
+                            if ($(event.target).hasClass("ace_text-input") || $(event.target).hasClass("ace_editor")) {
+                                var id = $(event.target).closest(".ace_editor").attr("id");
+                                var codeeditor = ace.edit(id);
+                                codeeditor.session.insert(codeeditor.getCursorPosition(), clipText);
+                            } else {
+                                var caret = PropertyAssistant.doGetCaretPosition(event.target);
+                                var text = $(event.target).val();
+                                var output = [text.slice(0, caret), clipText, text.slice(caret)].join('');
+                                $(event.target).val(output);
+                            }
+                        }
+                    });
+                } catch (err) {
+                    CustomBuilder.Builder.pasteNode();
+                }
+            }
+        } else {
+            CustomBuilder.Builder.pasteNode();
+        }
     },
     
     /*
@@ -2595,7 +3124,8 @@
             });
         }
         
-        if($('#cbuilder-json-original').val() === $('#cbuilder-json').val() && !hasChange){
+        if(((CustomBuilder.savedJson !== undefined && CustomBuilder.savedJson === $('#cbuilder-json').val()) ||
+            ($('#cbuilder-json-original').val() === $('#cbuilder-json').val())) && !hasChange){
             return true;
         }else{
             return false;
@@ -2633,6 +3163,8 @@
      * Render additional menus to adding bar
      */
     intBuilderMenu : function() {
+        UI.userview_app_id = CustomBuilder.appId;
+        
         if ($("#quick-nav-bar").find("#builder-quick-nav").length === 0) {
             $("#quick-nav-bar").append('<div id="closeQuickNav"></div>');
             $("#quick-nav-bar").append('<div id="builder-quick-nav">\
@@ -2743,7 +3275,7 @@
         for (var i in data) {
             var builder = data[i];
             var li = $('<li class="builder-icon menu-'+builder.value+'"><span tooltip-position="right" title="'+builder.label+'" style="background: '+builder.color+';color: '+builder.color+'"><i class="'+builder.icon+'"></i></span><ul></ul></li>');
-            $(li).find("ul").append('<li class="header"><span class="header-label">'+builder.label+'</span> <span class="addnew"><a data-type="'+builder.value+'"><i class="las la-plus-circle"></i> '+get_cbuilder_msg("cbuilder.addnew")+'</a></span></li>');
+            $(li).find("ul").append('<li class="header"><span class="header-label">'+builder.label+'</span> <span class="addnew"><a data-type="'+builder.value+'"><i class="las la-plus"></i> '+get_cbuilder_msg("cbuilder.addnew")+'</a></span></li>');
             CustomBuilder.builderTypes.push(builder.value);
             if (builder.elements) {
                 for (var j in builder.elements) {
@@ -2929,6 +3461,25 @@
             }
         }
     },
+    
+    /*
+     *  remove all the custom styling from all elements 
+     */
+    clearCustomStyling : function(data, checker) {
+        var props = Object.getOwnPropertyNames(data);
+        for (var i = 0; i < props.length; i++) {
+            var name = props[i];
+            if (typeof data[name] === "object") {
+                CustomBuilder.clearCustomStyling(data[name]);
+            } else if (Array.isArray(data[name])) {
+                for (var j = 0; j < data[name].length; j++) {
+                    CustomBuilder.clearCustomStyling(data[name][j]);
+                }
+            } else if (name.indexOf("style-") === 0 || (checker !== undefined && checker(name))) {
+                delete data[name];
+            }
+        }
+    }
 };
 
 /*
@@ -2986,23 +3537,37 @@ _CustomBuilder.Builder = {
                         <div id="element-parent-name"></div> \
                     </div> \
                     <div id="element-highlight-box"> \
-                        <div id="element-highlight-name"></div> \
-                    </div> \
-                    <div id="element-select-box"> \
-                        <div id="element-select-name"><div id="element-name"></div> \
-                            <div id="element-actions">   \
-                                <a id="parent-btn" href="" title="'+get_cbuilder_msg("cbuilder.selectParent")+'"><i class="las la-level-up-alt"></i></a> \
-                                <a id="up-btn" href="" title="'+get_cbuilder_msg("cbuilder.moveUp")+'"><i class="la la-arrow-up"></i></a> \
-                                <a id="down-btn" href="" title="'+get_cbuilder_msg("cbuilder.moveDown")+'"><i class="la la-arrow-down"></i></a> \
-                                <a id="left-btn" href="" title="'+get_cbuilder_msg("cbuilder.moveLeft")+'"><i class="la la-arrow-left"></i></a> \
-                                <a id="right-btn" href="" title="'+get_cbuilder_msg("cbuilder.moveRight")+'"><i class="la la-arrow-right"></i></a> \
-                                <span id="element-options"> \
+                        <div id="element-highlight-name"><div class="element-name"></div> \
+                            <div class="element-actions">   \
+                                <a class="parent-btn" title="'+get_cbuilder_msg("cbuilder.selectParent")+'"><i class="las la-level-up-alt"></i></a> \
+                                <a class="up-btn" title="'+get_cbuilder_msg("cbuilder.moveUp")+'"><i class="la la-arrow-up"></i></a> \
+                                <a class="down-btn" title="'+get_cbuilder_msg("cbuilder.moveDown")+'"><i class="la la-arrow-down"></i></a> \
+                                <a class="left-btn" title="'+get_cbuilder_msg("cbuilder.moveLeft")+'"><i class="la la-arrow-left"></i></a> \
+                                <a class="right-btn" title="'+get_cbuilder_msg("cbuilder.moveRight")+'"><i class="la la-arrow-right"></i></a> \
+                                <span class="element-options"> \
                                     \
                                 </span>   \
-                                <a id="delete-btn" href="" title="'+get_cbuilder_msg("cbuilder.remove")+'"><i class="la la-trash"></i></a> \
+                                <a class="delete-btn" href="" title="'+get_cbuilder_msg("cbuilder.remove")+'"><i class="la la-trash"></i></a> \
                             </div> \
                         </div> \
-                        <div id="element-bottom-actions">   \
+                        <div class="element-bottom-actions">   \
+                        </div> \
+                    </div> \
+                    <div id="element-select-box"> \
+                        <div id="element-select-name"><div class="element-name"></div> \
+                            <div class="element-actions">   \
+                                <a class="parent-btn" title="'+get_cbuilder_msg("cbuilder.selectParent")+'"><i class="las la-level-up-alt"></i></a> \
+                                <a class="up-btn" title="'+get_cbuilder_msg("cbuilder.moveUp")+'"><i class="la la-arrow-up"></i></a> \
+                                <a class="down-btn" title="'+get_cbuilder_msg("cbuilder.moveDown")+'"><i class="la la-arrow-down"></i></a> \
+                                <a class="left-btn" title="'+get_cbuilder_msg("cbuilder.moveLeft")+'"><i class="la la-arrow-left"></i></a> \
+                                <a class="right-btn" title="'+get_cbuilder_msg("cbuilder.moveRight")+'"><i class="la la-arrow-right"></i></a> \
+                                <span class="element-options"> \
+                                    \
+                                </span>   \
+                                <a class="delete-btn" href="" title="'+get_cbuilder_msg("cbuilder.remove")+'"><i class="la la-trash"></i></a> \
+                            </div> \
+                        </div> \
+                        <div class="element-bottom-actions">   \
                         </div> \
                     </div> \
                 </div> \
@@ -3072,8 +3637,9 @@ _CustomBuilder.Builder = {
             if (selectedELSelector !== "") {
                 var element = self.frameBody.find(selectedELSelector);
                 if (element.length > 1) {
+                    var elements = element;
                     do {
-                        element = element[selectedElIndex];
+                        element = elements[selectedElIndex];
                     } while (element === undefined && selectedElIndex-- > 0);
                 }
                 if ($(element).length > 0) {
@@ -3187,12 +3753,24 @@ _CustomBuilder.Builder = {
                         //TODO: if differrent, need add it?
                     }
                     
+                    if ($(this).find("> .clear-float").length === 0) { //add clear float to check hight in case the childs are all floated
+                        $(this).append('<div class="clear-float"></div>');
+                    }
                     if ($(this).outerHeight(false) === 0) {
                         $(this).attr("data-cbuilder-invisible", "");
                     }
                     i++;
                 });
             }
+        }
+        
+        var childsContainerAttr = component.builderTemplate.getChildsContainerAttr(elementObj, component);
+        if (childsContainerAttr !== undefined && childsContainerAttr !== null && childsContainerAttr !== "" && 
+            ($(element).is('[data-cbuilder-'+childsContainerAttr+']') || 
+            $(element).find('[data-cbuilder-'+childsContainerAttr+']').length > 0)) {
+            $(element).attr('data-cbuilder-iscontainer', '');
+        } else {
+            $(element).attr('data-cbuilder-noncontainer', '');
         }
     },
     
@@ -3214,6 +3792,8 @@ _CustomBuilder.Builder = {
             $(window.FrameWindow).on("scroll resize", function (event) {
                 self._updateBoxes();
             });
+            
+            window.FrameWindow["UI"].userview_app_id = CustomBuilder.appId;
 
             return self._frameLoaded(callback);
         });
@@ -3611,7 +4191,11 @@ _CustomBuilder.Builder = {
         }
         
         self.component = copiedComponent;
-        self.renderElement(copiedObj, temp, copiedComponent, true);
+        self.renderElement(copiedObj, temp, copiedComponent, true, null, function(element){
+            if ($(element).find("[data-cbuilder-classname]").length > 0) {
+                self.recursiveCheckVisible(element);
+            }
+        });
     },
     
     /*
@@ -3632,16 +4216,28 @@ _CustomBuilder.Builder = {
         if (parent.length === 0) {
             parent = $(node).closest("body");
         }
-        var parentDataArray = $(parent).data("data")[component.builderTemplate.getParentDataHolder(elementObj, component)];
+        
+        var parentDataHolder = component.builderTemplate.getParentDataHolder(elementObj, component);
+        
+        if (parentDataHolder === null) { //if it is missing plugin, this will return null. getting it from parent element
+            var parentObj = $(parent).data("data");
+            if (parentObj) {
+                var parentComponent = self.parseDataToComponent(parentObj);
+                parentDataHolder = parentComponent.builderTemplate.getChildsDataHolder(parentObj, parentComponent);
+            } else {
+                parentDataHolder = component.builderTemplate.parentDataHolder; //default back to "elements"
+            }
+        }
+        
+        var parentDataArray = $(parent).data("data")[parentDataHolder];
         if (parentDataArray === undefined) {
             parentDataArray = [];
-            $(parent).data("data")[component.builderTemplate.getParentDataHolder(elementObj, component)] = parentDataArray;
+            $(parent).data("data")[parentDataHolder] = parentDataArray;
         }
         var index = $.inArray($(node).data("data"), parentDataArray);
         if (index !== -1) {
             parentDataArray.splice(index, 1);
         }
-
 
         if (component.builderTemplate.unload)
             component.builderTemplate.unload($(node), elementObj, component);
@@ -3681,8 +4277,13 @@ _CustomBuilder.Builder = {
         
         self.frameBody.find('[data-cbuilder-inlineedit]').each(function(){
             try {
-                self.iframe.contentWindow.tinymce.EditorManager.execCommand('mceRemoveEditor',true, $(this).attr("id"));
+                self.iframe.contentWindow.tinymce.get($(this).attr("id")).destroy();
                 $(this).removeAttr('data-cbuilder-inlineedit');
+                if ($(this).is('[data-cbuilder-style-id]')) {
+                    var style = $(this).next('[data-cbuilder-style]');
+                    $(this).append(style);
+                    $(this).removeAttr("data-cbuilder-style-id");
+                }
                 $(this).off("change.inlineedit");
             }catch(err){}
         });
@@ -3765,6 +4366,12 @@ _CustomBuilder.Builder = {
             try {
                 var box = self.getBox(node);
                 $("#element-parent-box").hide();
+                
+                $("#element-select-box").removeClass("missing_component");
+                if ($(node).is("[data-cbuilder-missing-plugin]")) {
+                    $("#element-select-box").addClass("missing_component");
+                } 
+                
                 $("#element-select-box").css(
                     {
                         "top": box.top - self.frameDoc.scrollTop(),
@@ -3774,38 +4381,20 @@ _CustomBuilder.Builder = {
                         "display": "block"
                     });
                 
-                if (!isSubSelect || (isSubSelect && component.builderTemplate.isSubSelectAllowActions(data, component))) {
-                    $("#paste-element-btn").addClass("disabled");
-                    if (component.builderTemplate.isPastable(data, component)) {
-                        $("#paste-element-btn").removeClass("disabled");
-                    }
-                    
-                    $("#up-btn, #down-btn, #left-btn, #right-btn").hide();
-                    if (component.builderTemplate.isMovable(data, component)) {
-                        if ((!isSubSelect && $(self.selectedEl).closest('[data-cbuilder-sort-horizontal]').length > 0) || (isSubSelect && $(self.subSelectedEl).closest('[data-cbuilder-alternative-drop]').is('[data-cbuilder-sort-horizontal]'))) {
-                            $("#left-btn, #right-btn").show();
-                        } else {
-                            $("#up-btn, #down-btn").show();
-                        }
-                    }
-
-                    $("#delete-btn").hide();
-                    if (component.builderTemplate.isDeletable(data, component)) {
-                        $("#delete-btn").show();
-                    }
-
-                    $("#copy-element-btn").addClass("disabled");
-                    if (component.builderTemplate.isCopyable(data, component)) {
-                        $("#copy-element-btn").removeClass("disabled");
-                    }
-
-                    $("#parent-btn").hide();
-                    if (component.builderTemplate.isNavigable(data, component)) {
-                        $("#parent-btn").show();
-                    }
-                    $("#element-select-box #element-actions").show();
+                $("#element-select-box #element-select-name").attr("style", "");
+                $("#element-select-name .element-name").html(this._getElementType(data, component));
+                
+                var offset = $("#element-select-box #element-select-name").offset();
+                if (offset.top <= 55) {
+                    $("#element-select-box #element-select-name").css("top", "0px");
                 } else {
-                    $("#element-select-box #element-actions").hide();
+                    $("#element-select-box #element-select-name").css("top", "");
+                }
+                
+                if (!isSubSelect || (isSubSelect && component.builderTemplate.isSubSelectAllowActions(data, component))) {
+                    self.decorateBoxActions(node, data, component, $("#element-select-box"), box);
+                } else {
+                    $("#element-select-box .element-actions").hide();
                 }
                 
                 if (show) {
@@ -3836,13 +4425,18 @@ _CustomBuilder.Builder = {
                             $(inilineEditEl).removeAttr('data-cbuilder-desktop-invisible');
                             $(inilineEditEl).removeAttr('data-cbuilder-tablet-invisible');
                             $(inilineEditEl).removeAttr('data-cbuilder-mobile-invisible');
-
+                            
+                            if ($(inilineEditEl).find("style[data-cbuilder-style]").length > 0) {
+                                $(inilineEditEl).attr('data-cbuilder-style-id', $(inilineEditEl).find("style[data-cbuilder-style]").attr("data-cbuilder-style"));
+                                $(inilineEditEl).after($(inilineEditEl).find("style[data-cbuilder-style]"));
+                            }
+                            
                             try {
-                                var toolbar = 'styleselect | bold italic | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image';
+                                var toolbar = 'styles | bold italic | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image | removeformat';
                                 if (inlineEditor.mode === "full") {
-                                    toolbar = 'styleselect | fontselect fontsizeselect forecolor backcolor | bold italic | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image';
+                                    toolbar = 'styles | fontfamily fontsize forecolor backcolor | bold italic | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image | removeformat';
                                 } else if (inlineEditor.mode === "simple") {
-                                    toolbar = 'bold italic | alignleft aligncenter alignright alignjustify';
+                                    toolbar = 'bold italic | alignleft aligncenter alignright alignjustify | removeformat';
                                 }
                                 setTimeout(function(){
                                     //find propety field
@@ -3856,14 +4450,10 @@ _CustomBuilder.Builder = {
                                         extended_valid_elements:"style,link[href|rel]",
                                         custom_elements:"style,link,~link",
                                         valid_elements: '*[*]',
-                                        plugins: [
-                                            'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'hr',
-                                            'insertdatetime', 'media', 'table', 'contextmenu',
-                                            'textcolor', 'colorpicker', 'textpattern', 'imagetools'
-                                        ],
-                                        forced_root_block : '',
+                                        plugins: 'advlist autolink lists link image charmap preview anchor pagebreak searchreplace wordcount visualblocks visualchars code fullscreen insertdatetime media nonbreaking table directionality emoticons codesample',
                                         toolbar: toolbar,
                                         menubar: false,
+                                        promotion: false,
                                         init_instance_callback: function(editor) {
                                             editor.focus();
 
@@ -3924,30 +4514,8 @@ _CustomBuilder.Builder = {
                     }
                 }
                 
-                $("#element-select-box #element-select-name").attr("style", "");
-                $("#element-select-name #element-name").html(this._getElementType(data, component));
-                
-                $("#element-select-box #element-options").html("");
-                $("#element-select-box #element-bottom-actions").html("");
-                
                 if (component.builderTemplate.selectNode)
                     component.builderTemplate.selectNode(target, data, component);
-                
-                var offset = $("#element-select-box #element-select-name").offset();
-                if (offset.top <= 55) {
-                    $("#element-select-box #element-select-name").css("top", "0px");
-                } else {
-                    $("#element-select-box #element-select-name").css("top", "");
-                }
-                var right = offset.left + $("#element-select-box #element-select-name").width();
-                var frameRight = $("#iframe-wrapper").offset().left + $("#iframe-wrapper").width();
-                if (right > frameRight) {
-                    $("#element-select-box #element-select-name").css("right", ($("#element-select-box #element-select-name").width() - box.width) + "px");
-                    $("#element-select-box #element-select-name").css("left", "unset");
-                } else {
-                    $("#element-select-box #element-select-name").css("right", "unset");
-                    $("#element-select-box #element-select-name").css("left", "-1px");
-                }
                 
                 $("#element-highlight-box").hide();
                 self.highlightEl = null;
@@ -4055,7 +4623,7 @@ _CustomBuilder.Builder = {
             if (self.isDragging && self.dragElement) {
                 self.frameBody.find('[data-cbuilder-inlineedit]').each(function(){
                     try {
-                        self.iframe.contentWindow.tinymce.EditorManager.execCommand('mceRemoveEditor',true, $(this).attr("id"));
+                        self.iframe.contentWindow.tinymce.get($(this).attr("id")).destroy();
                         $(this).removeAttr('data-cbuilder-inlineedit');
                         $(this).off("change.inlineedit");
                     }catch(err){}
@@ -4376,7 +4944,7 @@ _CustomBuilder.Builder = {
         self.frameHtml.on("mousedown.builder touchstart.builder", function (event) {
             self.mousedown = true;
             var target = $(event.target);
-            if ($(target).closest('.mce-content-body[contenteditable]').length > 0 || $(target).closest('.mce-container').length > 0) {
+            if ($(target).closest('.mce-content-body[contenteditable]').length > 0 || $(target).closest('.tox-tinymce').length > 0) {
                 self.mousedown = false;
                 return true;
             }
@@ -4559,24 +5127,6 @@ _CustomBuilder.Builder = {
         }
         
         if ($(target).length > 0 && !$(target).is(self.frameBody) && !$(target).is('[data-cbuilder-uneditable]')) {
-            var box = self.getBox(target);
-            
-            $("#element-highlight-box").css(
-                    {"top": box.top - self.frameDoc.scrollTop(),
-                        "left": box.left - self.frameDoc.scrollLeft(),
-                        "width": box.width,
-                        "height": box.height,
-                        "display": event.target.hasAttribute('contenteditable') ? "none" : "block",
-                        "border": self.isDragging ? "1px dashed aqua" : "", //when dragging highlight parent with green
-                    });
-
-            var nameOffset = $("#element-highlight-box").offset();
-            if (nameOffset.top <= 76) {
-                $("#element-highlight-name").css("top", "0px");
-            } else {
-                $("#element-highlight-name").css("top", "");
-            }
-            
             var data = target.data("data");
             if (data === undefined && $(target).is('[data-cbuilder-select]')) {
                 var id = $(target).attr('data-cbuilder-select');
@@ -4584,8 +5134,36 @@ _CustomBuilder.Builder = {
             }
             if (data !== undefined) {
                 self.highlightEl = target;
+                
+                var box = self.getBox(target);
+            
+                $("#element-highlight-box").removeClass("missing_component");
+
+                $("#element-highlight-box").css(
+                        {"top": box.top - self.frameDoc.scrollTop(),
+                            "left": box.left - self.frameDoc.scrollLeft(),
+                            "width": box.width,
+                            "height": box.height,
+                            "display": event.target.hasAttribute('contenteditable') ? "none" : "block",
+                            "border": self.isDragging ? "1px dashed aqua" : "", //when dragging highlight parent with green
+                        });
+
+                if ($(target).is("[data-cbuilder-missing-plugin]")) {
+                    $("#element-highlight-box").addClass("missing_component");
+                }
+                
                 var component = self.parseDataToComponent(data);
-                $("#element-highlight-name").html(self._getElementType(data, component));
+                
+                $("#element-highlight-box .element-name").html(self._getElementType(data, component));
+                
+                var nameOffset = $("#element-highlight-box").offset();
+                if (nameOffset.top <= 76) {
+                    $("#element-highlight-name").css("top", "0px");
+                } else {
+                    $("#element-highlight-name").css("top", "");
+                }
+                
+                self.decorateBoxActions(target, data, component, $("#element-highlight-box"), box);
             } else {
                 $("#element-highlight-box").hide();
                 self.highlightEl = null;
@@ -4595,15 +5173,100 @@ _CustomBuilder.Builder = {
             self.highlightEl = null;
         }
     },
+    
+    /* 
+     * decorate the highlight or select box of an element
+     */
+    decorateBoxActions : function(element, data, component, box, boxOffset) {
+        var boxElement = $(box).data("element");
+        if (boxElement === element) { //it is still same element, do need to do it again
+            return;
+        }
+        
+        var isSubSelect = $(element).is('[data-cbuilder-select]');
+        
+        $("#paste-element-btn").addClass("disabled");
+        if (component.builderTemplate.isPastable(data, component)) {
+            $("#paste-element-btn").removeClass("disabled");
+        }
 
+        $(box).find(".up-btn, .down-btn, .left-btn, .right-btn").hide();
+        $(box).find(".element-name").removeClass("moveable");
+        if (!isSubSelect && component.builderTemplate.isMovable(data, component)) {
+            if ($(element).closest('[data-cbuilder-sort-horizontal]').length > 0) {
+                $(box).find(".left-btn, .right-btn").show();
+            } else {
+                $(box).find(".up-btn, .down-btn").show();
+            }
+        }
+        if (!isSubSelect && component.builderTemplate.isDraggable(data, component)) {
+            $(box).find(".element-name").addClass("moveable");
+        }
+
+        $(box).find(".delete-btn").hide();
+        if (!isSubSelect && component.builderTemplate.isDeletable(data, component)) {
+            $(box).find(".delete-btn").show();
+        }
+
+        $("#copy-element-btn").addClass("disabled");
+        if (!isSubSelect && component.builderTemplate.isCopyable(data, component)) {
+            $("#copy-element-btn").removeClass("disabled");
+        }
+
+        $(box).find(".parent-btn").hide();
+        if (!isSubSelect && component.builderTemplate.isNavigable(data, component)) {
+            $(box).find(".parent-btn").show();
+        }
+        $(box).find(".element-actions").show();
+
+        $(box).find(".element-options").html("");
+        $(box).find(".element-bottom-actions").html("");
+
+        if (!isSubSelect && component.builderTemplate.decorateBoxActions)
+            component.builderTemplate.decorateBoxActions(element, data, component, box);
+        
+        var nameWrapper = $(box).find("#element-highlight-name");
+        if ($(box).is("#element-select-box")) {
+            nameWrapper = $(box).find("#element-select-name");
+        }
+        
+        $(nameWrapper).css("left", "unset");
+        $(nameWrapper).css("right", "unset");
+
+        var offset = $(nameWrapper).offset();
+        var right = offset.left + $(nameWrapper).width();
+        var frameRight = $("#iframe-wrapper").offset().left + $("#iframe-wrapper").width();
+        if (right > frameRight) {
+            $(nameWrapper).css("right", ($(nameWrapper).width() - boxOffset.width) + "px");
+            $(nameWrapper).css("left", "unset");
+        } else {
+            $(nameWrapper).css("right", "unset");
+            $(nameWrapper).css("left", "-1px");
+        }
+        
+        $(box).data("element", element);
+    },
+    
+    /*
+     * set the selected element when highlight box action is clicked.
+     */
+    boxActionSetElement : function(event) {
+        var self = CustomBuilder.Builder;
+        
+        $("#element-highlight-box, #element-select-box").hide();
+        if ($(event.target).closest("#element-highlight-box").length > 0) {
+            self.selectNodeAndShowProperties(self.highlightEl, false, false);
+        }
+    },
+    
     /*
      * Initialize the select box buttons action
      */
     _initBox: function () {
         var self = this;
         
-        $("#element-select-name #element-name").off("mousedown.builder touchstart.builder");
-        $("#element-select-name #element-name").on("mousedown.builder touchstart.builder", function (event) {
+        $("body").off("mousedown.buildermove touchstart.buildermove", "#element-highlight-name .element-name.moveable, #element-select-name .element-name.moveable");
+        $("body").on("mousedown.buildermove touchstart.buildermove", "#element-highlight-name .element-name.moveable, #element-select-name .element-name.moveable", function (event) {
             self.mousedown = true;
             try {
                 CustomBuilder.checkChangeBeforeCloseElementProperties(function(hasChange) {
@@ -4611,6 +5274,8 @@ _CustomBuilder.Builder = {
                         self.mousedown = false;
                     }
                     if (self.mousedown) {
+                        self.boxActionSetElement(event);
+                        
                         if (self.component.builderTemplate.isDraggable(self.selectedElData, self.component)) {
                             $("#element-select-box").hide();
                             if (self.subSelectedEl){
@@ -4645,14 +5310,7 @@ _CustomBuilder.Builder = {
                             self.elementPosY = y;
 
                             if (self.component.builderTemplate.dragStart)
-                                self.dragElement = self.component.builderTemplate.dragStart(self.dragElement, self.component);
-
-                            if (self.component.builderTemplate.isAbsolutePosition(self.data, self.component)) {
-                                var elementOffset = self.dragElement.offset();
-                                var xDiff = x - elementOffset.left;
-                                var yDiff = y - elementOffset.top;
-                                self.dragElement.data("cursorPosition", {"x" : xDiff, "y" : yDiff});
-                            }    
+                                self.dragElement = self.component.builderTemplate.dragStart(self.dragElement, self.component); 
 
                             self.frameBody.find("[data-cbuilder-"+self.component.builderTemplate.getParentContainerAttr(self.data, self.component)+"]").attr("data-cbuilder-droparea", "");
                         }
@@ -4664,50 +5322,57 @@ _CustomBuilder.Builder = {
             return false;
         });
 
-        $("#down-btn, #right-btn").off("click");
-        $("#down-btn, #right-btn").on("click", function (event) {
-            $("#element-select-box").hide();
+        $(".element-actions .down-btn, .element-actions .right-btn").off("click");
+        $(".element-actions .down-btn, .element-actions .right-btn").on("click", function (event) {
+            self.boxActionSetElement(event);
+            
             self.moveNodeDown();
             event.preventDefault();
             return false;
         });
 
-        $("#up-btn, #left-btn").off("click");
-        $("#up-btn, #left-btn").on("click", function (event) {
-            $("#element-select-box").hide();
+        $(".element-actions .up-btn, .element-actions .left-btn").off("click");
+        $(".element-actions .up-btn, .element-actions .left-btn").on("click", function (event) {
+            self.boxActionSetElement(event);
+            
             self.moveNodeUp();
             event.preventDefault();
             return false;
         });
 
-        $("#copy-btn").off("click");
-        $("#copy-btn").on("click", function (event) {
-            $("#element-select-box").hide();
+        $(".element-actions .copy-btn").off("click");
+        $(".element-actions .copy-btn").on("click", function (event) {
+            self.boxActionSetElement(event);
+            
             self.copyNode();
             event.preventDefault();
             return false;
         });
 
-        $("#paste-btn").off("click");
-        $("#paste-btn").on("click", function (event) {
-            $("#element-select-box").hide();
+        $(".element-actions .paste-btn").off("click");
+        $(".element-actions .paste-btn").on("click", function (event) {
+            self.boxActionSetElement(event);
+            
             self.pasteNode();
             event.preventDefault();
             return false;
         });
 
-        $("#parent-btn").off("click");
-        $("#parent-btn").on("click", function (event) {
-            $("#element-select-box").hide();
-            node = self.selectedEl.parent().closest("[data-cbuilder-classname]");
+        $(".element-actions .parent-btn").off("click");
+        $(".element-actions .parent-btn").on("click", function (event) {
+            self.boxActionSetElement(event);
+            
+            var node = self.selectedEl.parent().closest("[data-cbuilder-classname]");
             self.selectNode(node);
             
             event.preventDefault();
             return false;
         });
 
-        $("#delete-btn").off("click");
-        $("#delete-btn").on("click", function (event) {
+        $(".element-actions .delete-btn").off("click");
+        $(".element-actions .delete-btn").on("click", function (event) {
+            self.boxActionSetElement(event);
+            
             self.deleteNode();
             event.preventDefault();
             return false;
@@ -4842,6 +5507,11 @@ _CustomBuilder.Builder = {
                         CustomBuilder.callback(CustomBuilder.Builder.options.callbacks["selectElement"], [element, elementObj, component]);
                     }
                 },
+                'decorateBoxActions' : function(element, elementObj, component, box) {
+                    if (CustomBuilder.Builder.options.callbacks["decorateBoxActions"] !== undefined && CustomBuilder.Builder.options.callbacks["decorateBoxActions"] !== "") {
+                        CustomBuilder.callback(CustomBuilder.Builder.options.callbacks["decorateBoxActions"], [element, elementObj, component, box]);
+                    }
+                },
                 'getDragHtml' : function(elementObj, component) {
                     return this.dragHtml;
                 },
@@ -4958,6 +5628,9 @@ _CustomBuilder.Builder = {
                     newcallback(element);
                 }
             },
+            'getParentDataHolder' : function(elementObj, component) {
+                return null;
+            },
             'supportProperties' : false,
             'supportStyle' : false,
             'draggable' : false,
@@ -4999,8 +5672,12 @@ _CustomBuilder.Builder = {
             if (html === undefined || html === null) {
                 html = self.component.builderTemplate.getHtml(self.data, self.component);
             }
-
+            
             self.dragElement = $(html);
+            
+            if ($(self.dragElement).find("> .clear-float").length === 0) { //add clear float to check hight in case the childs are all floated
+                $(self.dragElement).append('<div class="clear-float"></div>');
+            }
 
             if (self.component.builderTemplate.dragStart)
                 self.dragElement = self.component.builderTemplate.dragStart(self.dragElement, self.component);
@@ -5344,8 +6021,8 @@ _CustomBuilder.Builder = {
             }
 
             self.checkVisible(parent);
-            self.checkVisible(newParent);
             self.checkVisible(self.selectedEl);
+            self.checkVisible(newParent);
             
             if (self.subSelectedEl) {
                 self.selectNodeAndShowProperties(self.subSelectedEl, false, (!$("body").hasClass("no-right-panel")));
@@ -5672,16 +6349,31 @@ _CustomBuilder.Builder = {
     },
     
     /*
+     * Check visible from the most inner node
+     */
+    recursiveCheckVisible : function(node) {
+        $(node).find("> [data-cbuilder-classname]").each(function(){
+            CustomBuilder.Builder.recursiveCheckVisible($(this));
+        });
+        CustomBuilder.Builder.checkVisible($(node));
+    },
+    
+    /*
      * Check an element is visible or not, if not show an invisible flag
      */
     checkVisible : function(node) {
         $(node).removeAttr("data-cbuilder-invisible");
-        if (!$(node).is('[data-cbuilder-uneditable]')) {
+        if (!$(node).is('[data-cbuilder-uneditable]') && !$(node).is('[data-cbuilder-visible]')) { //use "data-cbuilder-visible" to skip visiblity check
             var temp = $('<div>'+$(node).html()+'</div>');
-            $(temp).find('style').remove();
-            if ($(node).is('div, p') && $(temp).html() === "") {
+            $(temp).find('style, script').remove();
+            if ($(node).is('div, p') && $(temp).text().trim() === "" 
+                    && $(node).find("[data-cbuilder-invisible]").length === 0
+                    && $(node).find("a, img, svg, video, iframe, picture, canvas").length === 0) { //handle non-text elements
                 $(node).attr("data-cbuilder-invisible", "");
             } else {
+                if ($(node).find("> .clear-float").length === 0) { //add clear float to check hight in case the childs are all floated
+                    $(node).append('<div class="clear-float"></div>');
+                }
                 var height = $(node).outerHeight(false);
                 if ($(node).find("> .cbuilder-node-details").length > 0) {
                     height = height - $(node).find("> .cbuilder-node-details").outerHeight();
@@ -5726,19 +6418,23 @@ _CustomBuilder.Builder = {
                     if (props.label !== undefined && props.label !== "") {
                         label = props.label;
                     } else if (props.textContent !== undefined && props.textContent !== "") {
-                        label = UI.escapeHTML(props.textContent);
-                        if (label.length > 30) {
-                            label += label.substring(0, 27) + "...";
-                        }
+                        label = props.textContent;
                     } else if (props.id !== undefined && props.id !== "" && props.id.length < 32) {
                         label = props.id;
                     }
+                }
+                
+                label = UI.stripHtmlTags(label);
+                if (label.length > 30) {
+                    label += label.substring(0, 27) + "...";
                 }
                 
                 var li = $('<li class="tree-viewer-item"><label>'+component.icon+' <a>'+label+'</a></label><input type="checkbox" id="'+rid+'" checked/></li>');
                 $(li).data("node", $(this));
                 $(li).attr("data-cbuilder-node-id", props.id);
                 
+                //create a refer from element back to the tree node
+                $(this).data("tree-node", $(li));
                 
                 $(this).off("builder.selected");
                 $(this).on("builder.selected", function(event) {
@@ -5877,6 +6573,9 @@ _CustomBuilder.Builder = {
             if (component.builderTemplate.getLabel) {
                 label = component.builderTemplate.getLabel(data, component);
             }
+            if ($(element).is("[data-cbuilder-missing-plugin]")) {
+                label = '<span class="missing-plugin">' + label + "</span>";
+            }
             dl.append('<dt><i class="las la-cube" title="'+get_cbuilder_msg('cbuilder.type')+'"></i></dt><dd>'+label+'</dd>');
 
             var props = self.parseElementProps(data);
@@ -5963,6 +6662,13 @@ _CustomBuilder.Builder = {
         $(detailsDiv).uitooltip({
             position: { my: "left+15 center", at: "right center" }
         });
+        
+        if ($(detailsDiv).find("span.missing-plugin").length > 0) {
+            var treeNode = $(target).data("tree-node");
+            if ($(treeNode).length > 0) {
+                $(treeNode).find("> label > a").css("color", "#fb8e8e");
+            }
+        }
     },
     
     /*
@@ -6354,7 +7060,11 @@ _CustomBuilder.Builder = {
             }
         }
         
-        setTimeout(function() {
+        if (CustomBuilder.screenshotTimeout !== undefined && CustomBuilder.screenshotTimeout !== null) {
+            clearTimeout(CustomBuilder.screenshotTimeout);
+        }
+        
+        CustomBuilder.screenshotTimeout = setTimeout(function() {
             CustomBuilder.getScreenshot(target, function(image){
                 $("#screenshotViewImage").html('<img style="max-width:100%; border:1px solid #ddd;" src="'+image+'"/>');
                 
@@ -6366,8 +7076,10 @@ _CustomBuilder.Builder = {
                 $("#screenshotView .sticky-buttons").append(link);
                 
                 self.frameBody.removeClass("screenshot-in-progress");
+                CustomBuilder.screenshotTimeout = null;
             }, function(error) {
                 self.frameBody.removeClass("screenshot-in-progress");
+                CustomBuilder.screenshotTimeout = null;
             });
         }, 300);
     },

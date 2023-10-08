@@ -1,3 +1,9 @@
+.dataList .table-wrapper{
+    overflow-x: auto;
+    width: 100%;
+    min-height: 300px;
+    padding-bottom: 50px;
+}
 .dataList table {
     margin:0px 0 !important;
     -moz-border-radiusx:12px;
@@ -154,13 +160,21 @@
     margin-bottom: 2px;
 }
 .dataList .filter-cell{
-    vertical-align: bottom;
+    vertical-align: top;
+    position: relative;
+}
+.dataList .filter-cell .close-icon:after{ 
+    right: 20px !important;
+    top: 21px !important;
+    bottom: unset  !important;
 }
 .dataList .filter-cell.hidden-filter,
 .search_filter_popup .filter-cell.hidden-filter{
     display:none !important;
 }
-
+body .filter-cell .form-button {
+    margin-bottom: 15px !important;
+}
 .dataList .actions.right{
     text-align:right;
 }
@@ -279,7 +293,8 @@
 .filters { text-align:right; font-size:smaller }
 .filter-cell{display:inline-block;padding-left:5px;}
 .dataList .rowaction_body a:not(.stretched-link),
-.dataList a.rowaction_body:not(.stretched-link) {
+.dataList a.rowaction_body:not(.stretched-link),
+.dataList .column_body a{
     z-index: 2;
     position: relative;
 }
@@ -294,8 +309,32 @@
 .dataList .dropdown-menu a {
     display: block;
 }
-
-
+.dataList .dropdown-menu a.dropdown-item{
+    display: block;
+    width: 100%;
+    padding: 0.25rem 1.5rem;
+    clear: both;
+    font-weight: 400;
+    color: #212529 !important;
+    text-align: inherit;
+    white-space: nowrap;
+    background-color: transparent !important;
+    border-color: transparent !important;
+    border: 0;
+    box-shadow: none !important;
+    width: auto;
+}
+.dataList .dropdown-menu.dropdown-menu-right {
+    right: 14px;
+    left: auto;
+    top: 34px;
+}
+.dataList .column_body strong.label{
+    color: inherit;
+    text-align: unset;
+    padding: 0;
+    background-color: transparent;
+}
 .dataList .responsivetable .cell-label {
     display:none;
 }
@@ -319,10 +358,74 @@
 .dataList.size_sm > .table-wrapper > table.responsivetable > tbody,
 .dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr,
 .dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr,
-.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td,
-.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td{
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td:not([data-cbuilder-sample]):not(.control_hide),
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td:not([data-cbuilder-sample]):not(.control_hide){
     display: block !important;
     border:0;
+    width: auto !important;
+    text-align: left;
+}
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td:not([data-cbuilder-sample]),
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td:not([data-cbuilder-sample]){
+    padding: 0px !important;
+}
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-label,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-label,
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-value,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-value{
+    display: inline-block;
+    vertical-align: top;
+    padding: 5px;
+    box-sizing: border-box;
+}
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-label.column-hidden,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-label.column-hidden,
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-value.column-hidden,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-value.column-hidden{
+    display: none;
+}
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-label,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-label{
+    width:40%;
+    margin-top: 2px;    
+}
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-value,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td > .cell-value{
+    width:60%
+}
+.dataList.size_sm > form > .table-wrapper > table.cardLayout.cardCollapsible > tbody > tr.collapsed > td[xclass]:not(.collapsible_toggle_column), 
+.dataList.size_sm > .table-wrapper > table.cardLayout.cardCollapsible > tbody > tr.collapsed > td[xclass]:not(.collapsible_toggle_column),
+.dataList.size_sm > form > .table-wrapper > table.cardLayout.cardCollapsible > tbody > tr.collapsed > td.rowaction_body, 
+.dataList.size_sm > .table-wrapper > table.cardLayout.cardCollapsible > tbody > tr.collapsed > td.rowaction_body{
+    display: none !important;
+} 
+.cardLayout.cardCollapsible > tbody > tr > td.collapsible_toggle_column > .collapsible_toggle {
+    position: absolute;
+    z-index: 1;
+    cursor: pointer;
+    right:15px;
+    top:16px;
+    font-size: 16px;
+    color: #737373;
+}
+.cardLayout.cardCollapsible > tbody > tr > td.collapsible_toggle_column > .collapsible_toggle > .fa-plus-square,
+.cardLayout.cardCollapsible > tbody > tr.collapsed > td.collapsible_toggle_column > .collapsible_toggle > .fa-minus-square{
+    display: none;
+}
+.cardLayout.cardCollapsible > tbody > tr.collapsed > td.collapsible_toggle_column > .collapsible_toggle > .fa-plus-square{
+    display: block;
+}
+.card-actions a{
+    margin-right: 5px;
+}
+.dataList .collapsibleBtns {
+    text-align: right;
+}
+.dataList .collapsibleBtns a {
+    font-size: 90%;
+    display: inline-block;
+    cursor: pointer;
+    padding: 5px;
 }
 .dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td.rowaction_body,
 .dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td.rowaction_body{
@@ -363,6 +466,7 @@
 .dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td.select_checkbox input,
 .dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td.select_radio input{
     display: none !important;
+    margin-right: 5px;
 }
 .dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td.select_checkbox > label > i,
 .dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td.select_radio > label > i ,
@@ -386,6 +490,12 @@
 .dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td.select_checkbox > label > :checked + i,
 .dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td.select_radio > label > :checked + i {
     box-shadow: 0px 0px 8px 0 rgb(0 67 255 / 70%) !important;
+}
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td.select_checkbox > label > i:after,
+.dataList.size_sm > form > .table-wrapper > table.responsivetable > tbody > tr > td.select_radio > label > i:after ,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td.select_checkbox > label > i:after,
+.dataList.size_sm > .table-wrapper > table.responsivetable > tbody > tr > td.select_radio > label > i:after {
+    display:none;
 }
 
 .filter_form .mobile_search_trigger,
@@ -520,7 +630,7 @@
     right: 30px;
     display: block;
     margin-top: 8px;
-    z-index: 1000;
+    z-index: 500;
 }
 .dataList .show_hide_control .toggle{
     position: absolute;
@@ -567,6 +677,58 @@
     display: inline-block !important;
     margin-right: 5px;
 }
-.dataList .show_hide_control:hover ul {
+html.ismobile .dataList .show_hide_control.show_dropdown ul,
+html:not(.ismobile) .dataList .show_hide_control:hover ul {
     display: block;
+}
+.dataList .rowActionsDropdown .dropdown-menu.dropdown-menu-left{
+    left:0;
+    right: auto;
+}
+.dataList .rowActionsDropdown .dropdown-menu{
+    top: 26px;
+    padding: 5px;
+}
+.dataList .rowActionsDropdown .dropdown-menu .row_action{
+    padding: 5px;
+    display: block;
+}
+.dataList .rowActionsDropdown .dropdown-menu .row_action a {
+    background: transparent;
+    border:0;
+    text-align: left;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    box-shadow: none;
+    display: block;
+}
+.dataList .card .card-text.has-inline-label:after{
+    clear: both;
+    content:"";
+    display: block;
+}
+.dataList .card .card-text > .label{
+    display: inline-block;
+    width: 40%;
+    float: left;
+    font-weight: bold;
+    color: unset;
+    text-align: left;
+    font-size: inherit;
+    padding-left: 0px;
+    padding-right: 15px;
+    background: unset;
+    box-sizing: border-box;
+    white-space: unset !important;
+}
+.dataList .card .card-text > .column-value{
+    display: inline-block;
+    box-sizing: border-box;
+    width: 60%;
+    white-space: unset !important;
+}
+.body .dataList th.row_action:empty,
+.body .dataList td.row_action:empty{
+    padding: 0 !important;
 }

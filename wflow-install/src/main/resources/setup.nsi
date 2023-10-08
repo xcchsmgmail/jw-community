@@ -167,7 +167,7 @@ Section "Joget DX" SecJoget
         RmDir /r "$INSTDIR\apache-tomcat-$EXISTING_TOMCAT_VERSION\webapps\jw"
         RmDir /r "$INSTDIR\apache-tomcat-$EXISTING_TOMCAT_VERSION\webapps\jwdesigner"
         CreateDirectory "$INSTDIR\apache-tomcat-$EXISTING_TOMCAT_VERSION\webapps"
-        File /oname=apache-tomcat-$EXISTING_TOMCAT_VERSION\webapps\jw.war apache-tomcat-9.0.62\webapps\jw.war
+        File /oname=apache-tomcat-$EXISTING_TOMCAT_VERSION\webapps\jw.war apache-tomcat-9.0.76\webapps\jw.war
         CreateDirectory "$INSTDIR\data"
         File /oname=data\jwdb-empty.sql data\jwdb-empty.sql
         File /oname=data\jwdb-sample.sql data\jwdb-sample.sql
@@ -182,8 +182,8 @@ Section "Joget DX" SecJoget
 
   ;Joget Files Here
   File /r apache-ant-1.7.1
-  CreateDirectory "$INSTDIR\apache-tomcat-9.0.62\webapps"
-  File /oname=apache-tomcat-9.0.62\webapps\jw.war apache-tomcat-9.0.62\webapps\jw.war
+  CreateDirectory "$INSTDIR\apache-tomcat-9.0.76\webapps"
+  File /oname=apache-tomcat-9.0.76\webapps\jw.war apache-tomcat-9.0.76\webapps\jw.war
   CreateDirectory "$INSTDIR\data"
   File /oname=data\jwdb-empty.sql data\jwdb-empty.sql
   File /oname=data\jwdb-sample.sql data\jwdb-sample.sql
@@ -214,7 +214,7 @@ Section "Apache Tomcat 9" SecTomcat
 
 ${If} $INSTALL_TYPE == "${INSTALL_TYPE_FULL}"
   ;Tomcat File Here
-  File /r /x *.war apache-tomcat-9.0.62
+  File /r /x *.war apache-tomcat-9.0.76
   File tomcat-run.bat
   File tomcat-stop.bat
   File joget-start.bat
@@ -233,7 +233,7 @@ Section "Java 11" SecJava
 
   ${If} $INSTALL_TYPE == "${INSTALL_TYPE_FULL}"  
     ;Java Files Here
-    File /r jre11.0.13
+    File /r jre11.0.18
   ${EndIf}  
 
 SectionEnd
@@ -245,7 +245,7 @@ Section "MariaDB 10" SecMariaDB
 
   ${If} $INSTALL_TYPE == "${INSTALL_TYPE_FULL}"
     ;MariaDB Files Here
-    File /r mariadb-10.3.9-win32
+    File /r mariadb-10.6.12-winx64
     File mariadb-start.bat
     File mariadb-stop.bat
   ${EndIf}
@@ -282,6 +282,15 @@ Function CheckUpgrade
 
   ${If} ${FileExists} $INSTDIR\apache-tomcat-6.0.18\webapps\wflow-designerweb.war
     StrCpy $INSTALL_TYPE ${INSTALL_TYPE_ABORT}
+  ${ElseIf} ${FileExists} $INSTDIR\apache-tomcat-9.0.76\webapps\jw.war
+    StrCpy $INSTALL_TYPE ${INSTALL_TYPE_UPDATE}
+    StrCpy $EXISTING_TOMCAT_VERSION "9.0.76"  
+  ${ElseIf} ${FileExists} $INSTDIR\apache-tomcat-9.0.74\webapps\jw.war
+    StrCpy $INSTALL_TYPE ${INSTALL_TYPE_UPDATE}
+    StrCpy $EXISTING_TOMCAT_VERSION "9.0.74"  
+  ${ElseIf} ${FileExists} $INSTDIR\apache-tomcat-9.0.71\webapps\jw.war
+    StrCpy $INSTALL_TYPE ${INSTALL_TYPE_UPDATE}
+    StrCpy $EXISTING_TOMCAT_VERSION "9.0.71"  
   ${ElseIf} ${FileExists} $INSTDIR\apache-tomcat-9.0.62\webapps\jw.war
     StrCpy $INSTALL_TYPE ${INSTALL_TYPE_UPDATE}
     StrCpy $EXISTING_TOMCAT_VERSION "9.0.62"  
@@ -361,9 +370,9 @@ Section "Uninstall"
   RMDir /r "$SMPROGRAMS\Joget DX 8"
 
   RmDir /r "$INSTDIR\apache-ant-1.7.1"
-  RmDir /r "$INSTDIR\jre11.0.13"
-  RmDir /r "$INSTDIR\apache-tomcat-9.0.62\webapps\jw"
-  Delete "$INSTDIR\apache-tomcat-9.0.62\webapps\jw.war"
+  RmDir /r "$INSTDIR\jre11.0.18"
+  RmDir /r "$INSTDIR\apache-tomcat-9.0.76\webapps\jw"
+  Delete "$INSTDIR\apache-tomcat-9.0.76\webapps\jw.war"
   Delete "$INSTDIR\build.xml"
   Delete "$INSTDIR\LICENSE.txt"
   Delete "$INSTDIR\NOTICE.txt"

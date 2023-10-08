@@ -648,6 +648,7 @@ body .ui-icon-closethick{
     width: 20px !important;
     height: 20px !important;
     color:#ccc !important;
+    text-indent: 0px !important;
 }
 body .ui-icon-closethick:hover {
     color: #aaa !important;
@@ -910,7 +911,8 @@ a.guider_button:hover {
 }
 @media screen and (max-width:680px) { 
     #main-action-help,
-    .guider {
+    .guider,
+    .guider_hloverlay{
         display: none !important;
     }
 }
@@ -1024,7 +1026,7 @@ fieldset legend,
 }
 .form-row .form-input.withPrefix .prefix {
     background: #edecec;
-    height: 29px;
+    height: 32px;
     position: absolute;
     top: 0px;
     padding-top: 3px;
@@ -1033,6 +1035,8 @@ fieldset legend,
     z-index: 2;
     width: 50px;
     text-align: right;
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
 }
 .form-row .form-input.withPrefix input {
     padding-left: 55px;

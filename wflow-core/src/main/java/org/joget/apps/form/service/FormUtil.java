@@ -1513,8 +1513,12 @@ public class FormUtil implements ApplicationContextAware {
         dataModel.put("elementParamName", paramName);
 
         // set validator decoration
-        String decoration = FormUtil.getElementValidatorDecoration(element, formData);
-        dataModel.put("decoration", decoration);
+        if (!FormUtil.isReadonly(element, formData)) {
+            String decoration = FormUtil.getElementValidatorDecoration(element, formData);
+            dataModel.put("decoration", decoration);
+        } else {
+            dataModel.put("decoration", "");
+        }
 
         // set error, if any
         String error = FormUtil.getElementError(element, formData);
@@ -2199,7 +2203,7 @@ public class FormUtil implements ApplicationContextAware {
                             JSONObject objProperty = obj.getJSONObject(FormUtil.PROPERTY_PROPERTIES);
                             if (objProperty.has(FormUtil.PROPERTY_POST_PROCESSOR)) {
                                 JSONObject objProcessor = objProperty.getJSONObject(FormUtil.PROPERTY_POST_PROCESSOR);
-                                json = objProcessor.getString(FormUtil.PROPERTY_PROPERTIES);
+                                json = objProcessor.get(FormUtil.PROPERTY_PROPERTIES).toString();
                                 propertiesMap = AppPluginUtil.getDefaultProperties(p, json, appDef, ass);
                             }
                         }
@@ -2279,9 +2283,16 @@ public class FormUtil implements ApplicationContextAware {
                 if (storeBinder instanceof FormDeleteBinder) {
                     ((FormDeleteBinder) storeBinder).delete(element, rows, formData, deleteGrid, deleteSubform, abortProcess, deleteFiles);
                     delete = true;
-                } else if (loadBinder instanceof FormDataDeletableBinder) {
-                    String formId = ((FormDataDeletableBinder)loadBinder).getFormId();
-                    String tableName = ((FormDataDeletableBinder)loadBinder).getTableName();
+                } else if (loadBinder instanceof FormDataDeletableBinder || storeBinder instanceof FormDataDeletableBinder) {
+                    FormDataDeletableBinder dBinder;
+                    if (loadBinder instanceof FormDataDeletableBinder) {
+                        dBinder = ((FormDataDeletableBinder)loadBinder);
+                    } else {
+                        dBinder = ((FormDataDeletableBinder)storeBinder);
+                    }
+                    
+                    String formId = dBinder.getFormId();
+                    String tableName = dBinder.getTableName();
                     FormDataDao formDataDao = (FormDataDao) FormUtil.getApplicationContext().getBean("formDataDao");
                     formDataDao.delete(formId, tableName, rows);
                     
@@ -2457,7 +2468,7 @@ public class FormUtil implements ApplicationContextAware {
                                     }
                                 }
                             } else if (!storeJson && (FormUtil.PROPERTY_DATE_CREATED.equals(fieldName) || FormUtil.PROPERTY_DATE_MODIFIED.equals(fieldName))) {
-                                String value = jsonRow.getString(fieldName);
+                                String value = jsonRow.get(fieldName).toString();
                                 Date date = null;
                                 try {
                                     date = sdf.parse(value);
@@ -2466,7 +2477,7 @@ public class FormUtil implements ApplicationContextAware {
                                 }
                                 row.put(fieldName, date);
                             } else {
-                                String value = jsonRow.getString(fieldName);
+                                String value = jsonRow.get(fieldName).toString();
                                 row.setProperty(fieldName, value);
                             }
                         }

@@ -170,11 +170,14 @@ public class UserviewBuilderWebController {
         
         UserviewDefinition migratedUserview = userviewService.combinedUserviewDefinition(userview);
         
-        json = userviewService.saveUserviewPages(PropertyUtil.propertiesJsonStoreProcessing(migratedUserview.getJson(), json), userviewId, appDef);
+        String processedJson = PropertyUtil.propertiesJsonStoreProcessing(migratedUserview.getJson(), json);
+        
+        json = userviewService.saveUserviewPages(processedJson, userviewId, appDef);
         userview.setJson(json);
 
         boolean success = userviewDefinitionDao.update(userview);
-        jsonObject.accumulate("success", success);
+        jsonObject.put("success", success);
+        jsonObject.put("data", PropertyUtil.propertiesJsonLoadProcessing(processedJson));
 
         jsonObject.write(writer);
         return null;
@@ -372,6 +375,16 @@ public class UserviewBuilderWebController {
                 html = html.replaceAll(StringUtil.escapeRegex("@@"), StringUtil.escapeRegex("???"));
 
                 writer.write(html);
+            } else {
+                //it is missing component
+                String id = "";
+                JSONObject prop = jObj.getJSONObject("properties");
+                if (prop != null) {
+                    id = prop.getString("id");
+                }
+                
+                String html = "<div data-cbuilder-classname=\""+StringUtil.escapeString(jObj.getString("className"), StringUtil.TYPE_HTML)+"\" data-cbuilder-id=\""+StringUtil.escapeString(id, StringUtil.TYPE_HTML)+"\" ></div>";
+                writer.write(html);
             }
         } catch (Exception e) {
             LogUtil.error(UserviewBuilderWebController.class.getName(), e, "");
@@ -429,9 +442,9 @@ public class UserviewBuilderWebController {
 
         try {
             JSONObject jObj = new JSONObject(tempJson);
-            UniversalTheme theme = (UniversalTheme) pluginManager.getPlugin(jObj.getString("className"));
+            UserviewTheme theme = (UserviewTheme) pluginManager.getPlugin(jObj.getString("className"));
             
-            if (theme != null && theme instanceof SupportBuilderColorConfig) {
+            if (theme != null && theme instanceof UserviewV5Theme && theme instanceof SupportBuilderColorConfig) {
                 theme.setProperties(PropertyUtil.getProperties(jObj.getJSONObject("properties")));
             
                 Map requestParameters = userviewService.convertRequestParamMap(request.getParameterMap());

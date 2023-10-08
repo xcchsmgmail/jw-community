@@ -71,7 +71,9 @@ import org.enhydra.shark.instancepersistence.data.ProcessStateDO;
 import org.enhydra.shark.instancepersistence.data.ProcessStateQuery;
 import org.enhydra.shark.xpdl.XMLUtil;
 import org.joget.commons.util.DynamicDataSourceManager;
+import org.joget.commons.util.HostManager;
 import org.joget.commons.util.PagedList;
+import org.joget.commons.util.PluginThread;
 import org.joget.commons.util.UuidGenerator;
 import org.joget.workflow.model.dao.WorkflowHelper;
 import org.joget.workflow.model.dao.WorkflowProcessLinkDao;
@@ -301,6 +303,9 @@ public class WorkflowManagerImpl implements WorkflowManager {
      * @return
      */
     public byte[] getPackageContent(String packageId, String version) {
+        if (HostManager.isVirtualHostEnabled()) {
+            getPackage(packageId, version); //fix for xpdl return null issue in multitenant
+        }
 
         SharkConnection sc = null;
         byte[] data = null;
@@ -953,6 +958,8 @@ public class WorkflowManagerImpl implements WorkflowManager {
             if (entity != null) {
                 instanceId = entity.getId();
             }
+            
+            WorkflowUtil.writeRequestCache("xpdlCurrentVersion_" + packageId, null);
         } catch (PackageInvalid ex) {
             String errors = ex.getXPDLValidationErrors();
             if (errors != null) {
@@ -1036,8 +1043,9 @@ public class WorkflowManagerImpl implements WorkflowManager {
 
 
         } catch (Exception ex) {
-
-            LogUtil.error(getClass().getName(), ex, "");
+            if (!ex.getMessage().contains("does not exist")) { //ignore package not exist
+                LogUtil.error(getClass().getName(), ex, "");
+            }
         } finally {
             try {
                 disconnect(sc);
@@ -1087,8 +1095,9 @@ public class WorkflowManagerImpl implements WorkflowManager {
 
 
         } catch (Exception ex) {
-
-            LogUtil.error(getClass().getName(), ex, "");
+            if (!ex.getMessage().contains("does not exist")) { //ignore package not exist
+                LogUtil.error(getClass().getName(), ex, "");
+            }
         } finally {
             try {
                 disconnect(sc);
@@ -2815,7 +2824,7 @@ public class WorkflowManagerImpl implements WorkflowManager {
                 
                 if (wfProcess != null && !wfProcess.state().startsWith(SharkConstants.STATEPREFIX_CLOSED)) {
                     WAPI wapi = Shark.getInstance().getWAPIConnection();
-                    wapi.terminateProcessInstance(sessionHandle, procInstanceId);
+                    wapi.abortProcessInstance(sessionHandle, procInstanceId);
                 }
 
                 ea.deleteProcessesWithFiltering(sessionHandle, filter);
@@ -5072,6 +5081,56 @@ public class WorkflowManagerImpl implements WorkflowManager {
             // ignore initial error
         }
     }
+    
+    /**
+     * Internal method used to recover stuck tool activities due to improper shutdown
+     */
+    @Override
+    public void internalRecoverStuckToolActivities() {
+        final Collection<Object[]> stuckTools = workflowAssignmentDao.getStuckTools();
+        if (stuckTools != null && !stuckTools.isEmpty()) {
+            LogUtil.info(WorkflowManagerImpl.class.getName(), "Found " + stuckTools.size() + " stuck tool. Trying recover it...");
+            
+            Thread stuckToolsRecover = new PluginThread(new Runnable() {
+
+                @Override
+                public void run() {
+                    transactionTemplate.execute(new TransactionCallbackWithoutResult() {
+
+                        protected void doInTransactionWithoutResult(TransactionStatus transactionStatus) {
+                            SharkConnection sc = null;
+
+                            try {
+                                sc = connect();
+                                WMSessionHandle sessionHandle = sc.getSessionHandle();
+
+                                for (Object[] sa : stuckTools) {
+                                    try {
+                                        CustomWfActivityWrapper wrapper = new CustomWfActivityWrapper(sessionHandle, sa[0].toString(), sa[1].toString(), sa[2].toString());
+                                        wrapper.getProcessImpl().setReadOnly(false);
+                                        CustomWfActivityImpl activity = (CustomWfActivityImpl) wrapper.getActivityImpl();
+                                        activity.restartToolActivity(sessionHandle);
+                                    } catch (Exception e) {
+                                        LogUtil.error(getClass().getName(), e, "Fail to restart tool " + sa[2].toString());
+                                    }
+                                }
+                            } catch (Exception ex) {
+                                LogUtil.error(getClass().getName(), ex, "");
+                            } finally {
+                                try {
+                                    disconnect(sc);
+                                } catch (Exception e) {
+                                    LogUtil.error(getClass().getName(), e, "");
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+            stuckToolsRecover.setDaemon(true);
+            stuckToolsRecover.start();
+        }
+    }
 
     /**
      * Internal method used to checks deadlines
@@ -5930,7 +5989,8 @@ public class WorkflowManagerImpl implements WorkflowManager {
         JSONObject var = new JSONObject();
         for (Iterator j = varMap.keySet().iterator(); j.hasNext();) {
             String key = (String) j.next();
-            String val = varMap.get(key).toString();
+            Object valObj = varMap.get(key);
+            String val = (valObj != null)?valObj.toString():"";
             var.put(key, val);
         }
         history.setVariables(var.toString());
@@ -6059,7 +6119,7 @@ public class WorkflowManagerImpl implements WorkflowManager {
             }
             
             if (!subflowId.isEmpty()) {
-                aHistory.setPerformer(subflowId);
+                aHistory.setPerformer(activity.getPerformerId(sessionHandle));
             }
             aHistory.setType(type);
             aHistory.setParticipantId(participantId);
@@ -6083,7 +6143,8 @@ public class WorkflowManagerImpl implements WorkflowManager {
             JSONObject avar = new JSONObject();
             for (Iterator j = avarMap.keySet().iterator(); j.hasNext();) {
                 String key = (String) j.next();
-                String val = avarMap.get(key).toString();
+                Object valObj = varMap.get(key);
+                String val = (valObj != null)?valObj.toString():"";
                 avar.put(key, val);
             }
             aHistory.setVariables(avar.toString());

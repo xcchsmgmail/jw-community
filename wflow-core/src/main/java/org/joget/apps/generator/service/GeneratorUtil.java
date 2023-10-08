@@ -42,6 +42,7 @@ import org.joget.commons.util.UuidGenerator;
 import org.joget.plugin.base.Plugin;
 import org.joget.plugin.base.PluginManager;
 import org.joget.plugin.enterprise.CorporatiTheme;
+import org.joget.plugin.property.model.PropertyEditable;
 import org.joget.workflow.model.service.WorkflowManager;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -137,6 +138,14 @@ public class GeneratorUtil {
                     objProperty.put("id", userviewId);
                     objProperty.put("name", userviewName);
                     objProperty.put("description", userviewDescription);
+                }
+                //UI name is keep separately in setting
+                if (!obj.isNull("setting")) {
+                    JSONObject setting = obj.getJSONObject("setting");
+                    if (!setting.isNull("properties")) {
+                        JSONObject settingProp = setting.getJSONObject("properties");
+                        settingProp.put("userviewName", userviewName);
+                    }
                 }
                 return obj.toString();
             } catch (Exception e) {
@@ -364,6 +373,21 @@ public class GeneratorUtil {
      * @return 
      */
     public static String processResourceFile(GeneratorPlugin plugin, String resourceUrl, Object[] resourceArgs, String translationFileName, Map<String, String> variables,  String escapeFormat) {
+        return processResourceFile((PropertyEditable) plugin, resourceUrl, resourceArgs, translationFileName, variables, escapeFormat);
+    }
+    
+    /**
+     * processing the generator resource file with plugin properties and variables
+     * 
+     * @param plugin
+     * @param resourceUrl
+     * @param resourceArgs
+     * @param translationFileName
+     * @param variables
+     * @param escapeFormat
+     * @return 
+     */
+    public static String processResourceFile(PropertyEditable plugin, String resourceUrl, Object[] resourceArgs, String translationFileName, Map<String, String> variables,  String escapeFormat) {
         String content = AppUtil.readPluginResource(plugin.getClassName(), resourceUrl, resourceArgs, true, translationFileName);
         
         while (content.contains("${{uuid}}")) {
@@ -572,7 +596,10 @@ public class GeneratorUtil {
     public static void addElementJsonToForm(FormDefinition formDef, String json, boolean addToFirst, boolean addToColumn) {
         try {
             JSONObject formObject = new JSONObject(formDef.getJson());
-            JSONArray elements = formObject.getJSONArray("elements");
+            JSONArray elements = formObject.getJSONArray("elements"); //form childs > sections
+            if (elements.length() > 0) { //get last section's child
+                elements = elements.getJSONObject(elements.length() - 1).getJSONArray("elements");
+            }
             if (addToColumn) {
                 int index = 0;
                 if (!addToFirst) {

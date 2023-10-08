@@ -1,14 +1,18 @@
 package org.joget.commons.util;
 
+import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import org.apache.commons.collections.map.ListOrderedMap;
+import org.apache.commons.lang.StringUtils;
 import org.springframework.context.i18n.LocaleContextHolder;
 
 /**
@@ -19,7 +23,8 @@ public class TimeZoneUtil {
 
     private static String serverTimeZone;
     private static String serverTimeZoneId;
-    public static ListOrderedMap list;
+    public static Map<String, ListOrderedMap> localeList = new HashMap<String, ListOrderedMap>();
+    public static Map<String, String> LOCALE_DIGITS = new HashMap<String,String>();
 
     private TimeZoneUtil() {
     }
@@ -29,6 +34,8 @@ public class TimeZoneUtil {
      * @return a map of time zone id and its description
      */
     public static Map<String, String> getList() {
+        String locale = LocaleContextHolder.getLocale().toString();
+        ListOrderedMap list = localeList.get(locale);
         if (list == null) {
             list = new ListOrderedMap();
             list.put("", "");
@@ -82,6 +89,7 @@ public class TimeZoneUtil {
             }
             
             list.putAll(otherList);
+            localeList.put(locale, list);
         }
 
         return list;
@@ -126,8 +134,43 @@ public class TimeZoneUtil {
      * @return Date in converted String 
      */
     public static String convertToTimeZone(Date time, String gmt, String format) {
+        return convertToTimeZoneWithLocale(time, gmt, format, null);
+    }
+    
+    /**
+     * Convert Date to String based on GMT/Timezone ID and Date Format
+     * @param time Datetime to convert
+     * @param gmt GMT ("-12" to "12") or Timezone ID, NULL to use System/User selected timezone
+     * @param format Date Format
+     * @param locale
+     * @return Date in converted String 
+     */
+    public static String convertToTimeZoneWithLocale(Date time, String gmt, String format, String locale) {
         if (time == null) {
             return "";
+        }
+        
+        Locale userLocale = LocaleContextHolder.getLocale();
+        if (locale != null && !locale.isEmpty()) {
+            try {
+                String[] temp = locale.split("_");
+                switch (temp.length) {
+                    case 1:
+                        userLocale = new Locale(temp[0]);
+                        break;
+                    case 2:
+                        userLocale = new Locale(temp[0], temp[1]);
+                        break;
+                    case 3:
+                        userLocale = new Locale(temp[0], temp[1], temp[2]);
+                        break;
+                    default:
+                        userLocale = LocaleContextHolder.getLocale();
+                        break;
+                }
+            } catch (Exception e) {
+                userLocale = LocaleContextHolder.getLocale();
+            }
         }
         
         if (format == null || format.trim().length() == 0) {
@@ -135,9 +178,9 @@ public class TimeZoneUtil {
         }
         SimpleDateFormat dateFormat;
         try {
-            dateFormat = new SimpleDateFormat(format, LocaleContextHolder.getLocale());
+            dateFormat = new SimpleDateFormat(format, userLocale);
         } catch (Exception e) {
-            dateFormat = new SimpleDateFormat(ResourceBundleUtil.getMessage("console.setting.general.default.systemDateFormat"), LocaleContextHolder.getLocale());
+            dateFormat = new SimpleDateFormat(ResourceBundleUtil.getMessage("console.setting.general.default.systemDateFormat"), userLocale);
         }
         
         if (gmt != null && !gmt.isEmpty()) {
@@ -179,5 +222,29 @@ public class TimeZoneUtil {
         }
 
         return TimeZone.getDefault().getID();
+    }
+    
+    public static String convertDateDigitsFromLocaleToEnglish(String date, Locale locale) {
+        if (date != null && !date.isEmpty()) {
+            
+            String replace = LOCALE_DIGITS.get(locale.toString());
+            if (replace == null) {
+                NumberFormat format = NumberFormat.getIntegerInstance(locale);
+                replace = format.format(1234567890l);
+                
+                LOCALE_DIGITS.put(locale.toString(), replace);
+            }
+            
+            String english = LOCALE_DIGITS.get(Locale.ENGLISH.toString());
+            if (english == null) {
+                NumberFormat format = NumberFormat.getIntegerInstance(Locale.ENGLISH);
+                english = format.format(1234567890l);
+                
+                LOCALE_DIGITS.put(Locale.ENGLISH.toString(), english);
+            }
+            
+            date = StringUtils.replaceChars(date, replace, english);
+        }
+        return date;
     }
 }

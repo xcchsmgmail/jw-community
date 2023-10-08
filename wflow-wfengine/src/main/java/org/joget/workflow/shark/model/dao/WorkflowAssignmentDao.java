@@ -603,6 +603,19 @@ public class WorkflowAssignmentDao extends AbstractSpringDao {
         return 0;
     }
     
+    /**
+     * Only stuck tools having "open.running" status during startup
+     * @return 
+     */
+    public Collection<Object[]> getStuckTools() {
+        Session session = findSession();
+        String query = "SELECT e.processDefId, e.processId, e.activityId FROM SharkActivity e WHERE e.state.name = ?1";
+        Query q = session.createQuery(query);
+
+        q.setParameter(1, "open.running");
+        return q.list();
+    }
+    
     public Collection<String> getPackageDefIds(String packageId) {
         Session session = findSession();
         String query = "SELECT distinct e.processDefId FROM SharkProcess e WHERE e.processDefId like ?1";
@@ -942,6 +955,22 @@ public class WorkflowAssignmentDao extends AbstractSpringDao {
         super.saveOrUpdate(ACTIVITY_HISTORY_ENTITY_NAME, history);
     }
     
+    /**
+     * Used to check is there any completed process in shark table
+     */
+    public boolean hasNonHistoryCompletedProcess() {
+        //required to disable lazy loading 
+        String condition = "join e.state s";
+        Collection<String> params = new ArrayList<String>();
+        
+        condition += " where 1=1";
+        condition += " and s.name like ?";
+        params.add("closed.%");
+        Collection shProcess = find(PROCESS_ENTITY_NAME, "", condition, params.toArray(new String[0]), null, null, 0, 1);
+        
+        return !shProcess.isEmpty();
+    }
+    
     public Collection<WorkflowProcess> getProcessHistories(String packageId, String processDefId, String processId, String processName, String version, String recordId, String username, String sort, Boolean desc, Integer start, Integer rows) {
         //required to disable lazy loading 
         String condition = "join fetch e.link link";
@@ -1263,6 +1292,8 @@ public class WorkflowAssignmentDao extends AbstractSpringDao {
         workflowActivity.setPerformer(shAct.getParticipantId());
         if (shAct.getAssignmentUsers() != null) {
             workflowActivity.setAssignmentUsers(shAct.getAssignmentUsers().split(";"));
+        } else {
+            workflowActivity.setAssignmentUsers(new String[0]);
         }
         
         Calendar startedCal = Calendar.getInstance();

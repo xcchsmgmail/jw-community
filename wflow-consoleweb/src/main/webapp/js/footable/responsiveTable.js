@@ -155,17 +155,102 @@ function responsiveTable(datalist) {
                 var table = $(datalist).find("> form > .table-wrapper > table.responsivetable, > .table-wrapper > table.responsivetable");
                 
                 if (isMobile) {
+                    $(table).addClass("cardLayout");
                     $(table).find('> tbody > tr > td.column_body').each(function(){
-                        if ($(this).find('> .cell-label').length === 0) {
-                            $(this).prepend('<label class="cell-label"></label>');
-                            var index = $(this).parent().find("td").index(this);
+                        var td = $(this);
+                        if ($(td).find('> .cell-label').length === 0) {
+                            //wrapping the column body content to cell-value
+                            $(td).wrapInner('<div class="cell-value"></div>');
+                            
+                            //copy the column header text to cell label
+                            $(td).prepend('<label class="cell-label"></label>');
+                            var index = $(td).parent().find("td").index(td);
                             var th = $(table).find('> thead > tr > th:eq('+index+')');
-                            $(this).find('> .cell-label').text($(th).text());
-                            $(this).find('> .cell-label').addClass($(th).attr('class'));
+                            if ($(th).find('style').length > 0) { //if there is style tag in the header
+                                $(td).find('> .cell-label').html($(th).html());
+                                $(td).find('> .cell-label').find('style').remove();
+                                $(td).find('> .cell-label').text($(td).find('> .cell-label').text());
+                            } else {
+                                $(td).find('> .cell-label').text($(th).text());
+                            }
+                            
+                            //move the column header class to the cell-label to make custom styling working
+                            $(td).find('> .cell-label').addClass($(th).attr('class'));
+                            
+                            //move the column body class to the cell-value to make custom styling working
+                            $(td).find('> .cell-value').addClass($(this).attr('class'));
+                            $(td).attr("xclass", $(this).attr('class'));
+                            $(td).attr("class", "");
+                            
+                            //for the user hided column
+                            if ($(td).attr("xclass").indexOf("control_hide") !== -1) {
+                                $(td).addClass("control_hide");
+                            }
+                            
+                            //is list builder
+                            if ($(th).is('[data-cbuilder-id]')) { 
+                                $(td).attr("data-cbuilder-select", $(th).attr("data-cbuilder-id"));
+                                $(td).attr("data-cbuilder-ignore-dragging", "");
+                            }
                         }
                     });
+                    
+                    //is collasible setting is enabled
+                    if ($(table).hasClass("cardCollapsible")) {
+                        $(table).find('> tbody > tr').each(function(){
+                            
+                            //add toggle to the first row
+                            var firstCell = $(this).find('> td[xclass]:eq(0)');
+                            $(firstCell).addClass("collapsible_toggle_column");
+                            if ($(firstCell).find('> span.collapsible_toggle').length === 0) {
+                                $(firstCell).append('<span class="collapsible_toggle"><i class="fas fa-plus-square"></i><i class="fas fa-minus-square"></i></span>');
+                            }
+                        });
+                        
+                        //if collapsed by default, add collapsed class to all rows
+                        if ($(table).hasClass("cardCollapseByDefault")) {
+                            $(table).find('> tbody > tr').addClass("collapsed");
+                        }
+                        
+                        //event handling for collapse/expand toggle
+                        $(table).off("click.cardCollapsible_"+id, "span.collapsible_toggle");
+                        $(table).on("click.cardCollapsible_"+id, "span.collapsible_toggle", function(){
+                            $(this).closest("tr").toggleClass("collapsed");
+                        });
+                        
+                        //show collapse/expand all buttons
+                        $(".dataList#"+id).find('.collapsibleBtns').show();
+                        $(".dataList#"+id).find(".collapsibleBtns .expandAll").off("click.cardCollapsible_"+id);
+                        $(".dataList#"+id).find(".collapsibleBtns .collapseAll").off("click.cardCollapsible_"+id);
+                        $(".dataList#"+id).find(".collapsibleBtns .expandAll").on("click.cardCollapsible_"+id, function(){
+                            $(table).find('> tbody > tr').removeClass("collapsed");
+                            return false;
+                        });
+                        $(".dataList#"+id).find(".collapsibleBtns .collapseAll").on("click.cardCollapsible_"+id, function(){
+                            $(table).find('> tbody > tr').addClass("collapsed");
+                            return false;
+                        });
+                    }
                 } else {
-                    $(table).find('> tbody > tr > td > .cell-label').remove();
+                    //restore add remove all elements added for mobile
+                    $(table).removeClass("cardLayout");
+                    $(table).find('> tbody > tr').removeClass("collapsed");
+                    $(table).find('> tbody > tr > td[xclass]:eq(0)').removeClass("collapsible_toggle_column");
+                    $(table).find('> tbody > tr > td > span.collapsible_toggle').remove();
+                    $(table).find('> tbody > tr > td[xclass]').each(function(){
+                        var td = $(this);
+                        $(td).attr("class", $(td).attr('xclass'));
+                        $(td).removeAttr("xclass");
+                        $(td).find('> .cell-label').remove();
+                        $(td).find('> .cell-value').contents().unwrap();
+                    });
+                    
+                    $(table).off("click.cardCollapsible_"+id, "span.collapsible_toggle");
+                    
+                    //hide collapse/expand all buttons
+                    $(".dataList#"+id).find('.collapsibleBtns').hide();
+                    $(".dataList#"+id).find(".collapsibleBtns .expandAll").off("click.cardCollapsible_"+id);
+                    $(".dataList#"+id).find(".collapsibleBtns .collapseAll").off("click.cardCollapsible_"+id);
                 }
             });
         }, 2);
@@ -244,7 +329,7 @@ function draggableTable(datalist) {
             
             var columns = [];
             $(table).find('> thead > tr > th.column_header').each(function(){
-                columns.push($(this).attr("class").split(" ")[2]);
+                columns.push(getKey($(this)));
             });
             localStorage.setItem(key, JSON.stringify(columns));
         });
@@ -273,6 +358,10 @@ function rearrangeColumns(datalist, cache) {
     for (var i = 0; i < columns.length - 1; i++) {
         var current = "."+columns[i];
         var next = "."+columns[i+1];
+        
+        if (current.indexOf(".header_") !== 0) {
+            continue;
+        }
         
         var currentheader = $(table).find(current);
         var nextHeader = $(table).find(next);
@@ -307,13 +396,29 @@ function showHideColumns(datalist) {
     var hide = function(key) {
         var header = "."+key;
         var body = header.replace(".header_", ".body_");
-        $(table).find(header + ', ' + body).addClass("control_hide");
+        if ($(table).find(body).first().parent().is("[xclass]")) {
+            $(table).find(body).each(function(){
+                $(this).parent().addClass("control_hide");
+                $(this).parent().attr("xclass", $(this).parent().attr("xclass") + " control_hide");
+            });
+            $(table).find('th'+header).addClass("control_hide");
+        } else {
+            $(table).find(header + ', ' + body).addClass("control_hide");
+        }
     };
     
     var show = function(key) {
         var header = "."+key;
         var body = header.replace(".header_", ".body_");
-        $(table).find(header + ', ' + body).removeClass("control_hide");
+        if ($(table).find(body).first().parent().is("[xclass]")) {
+            $(table).find(body).each(function(){
+                $(this).parent().removeClass("control_hide");
+                $(this).parent().attr("xclass", $(this).parent().attr("xclass").replace(' control_hide', ''));
+            });
+            $(table).find('th'+header).removeClass("control_hide");
+        } else {
+            $(table).find(header + ', ' + body).removeClass("control_hide");
+        }
     };
     
     //rearrange columns
@@ -331,9 +436,17 @@ function showHideColumns(datalist) {
 
         var dropdown = $('<div class="show_hide_control"><span class="toggle"></span><ul></ul></div>');
         $(headers).each(function(){
-            $(dropdown).find('ul').append('<li><label><input type="checkbox" value="'+($(this).attr("class").split(" ")[2])+ '" ' + (!$(this).hasClass('control_hide')?'checked':'') +'/> '+$(this).text()+'</label></li>');
+            if (!$(this).is(".column-hidden")) {
+                $(dropdown).find('ul').append('<li><label><input type="checkbox" value="'+(getKey($(this)))+ '" ' + (!$(this).hasClass('control_hide')?'checked':'') +'/> '+$(this).text()+'</label></li>');
+            }
+        });
+        
+        $(dropdown).find('span.toggle').off('click');
+        $(dropdown).find('span.toggle').on('click', function(){
+            $(dropdown).toggleClass("show_dropdown");
         });
 
+        $(dropdown).find('input').off('click');
         $(dropdown).find('input').on('click', function(){
             if ($(this).is(':checked')) {
                 show($(this).attr('value'));
@@ -343,11 +456,21 @@ function showHideColumns(datalist) {
 
             var columns = [];
             $(table).find('> thead > tr > th.column_header.control_hide').each(function(){
-                columns.push($(this).attr("class").split(" ")[2]);
+                columns.push(getKey($(this)));
             });
             localStorage.setItem(key, JSON.stringify(columns));
         });
 
         $(table).before(dropdown);
     }, 2);
+}
+
+function getKey(header) {
+    var cssclasses = $(header).attr("class").split(" ");
+    for (var i = 2; i < cssclasses.length; i++) {
+        if (cssclasses[i].indexOf("header_") === 0) { //find the header class with id. 
+            return cssclasses[i];
+        }
+    }
+    return "";
 }

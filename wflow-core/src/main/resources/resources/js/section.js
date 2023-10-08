@@ -71,7 +71,7 @@ VisibilityMonitor.prototype.handleChange = function(targetEl, rules) {
     } catch (err) {}
     
     if (match && (targetEl.hasClass("section-visibility-hidden") || !targetEl.is(":visible"))) {
-        targetEl.css("display", "block");
+        targetEl.css("display", "");
         targetEl.removeClass("section-visibility-hidden");
         thisObject.enableInputField(targetEl);
     } else if (!match && (!targetEl.hasClass("section-visibility-hidden") || targetEl.is(":visible"))) {
@@ -83,7 +83,7 @@ VisibilityMonitor.prototype.handleChange = function(targetEl, rules) {
 
 VisibilityMonitor.prototype.checkValue = function(thisObject, controlEl, controlValue, isRegex) {
     //get enabled input field oni
-    controlEl = $(controlEl).filter("input[type=hidden]:not([disabled=true]), :enabled, [disabled=false]");
+    controlEl = $(controlEl).filter("input[type=hidden]:not([disabled=true]), :enabled, :disabled, [disabled=false]");
     controlEl = $(controlEl).filter(":not(.section-visibility-disabled)"); //must put in newline to avoid conflict with above condition
     
     var match = false;
@@ -92,6 +92,8 @@ VisibilityMonitor.prototype.checkValue = function(thisObject, controlEl, control
             controlEl = $(controlEl).filter(":checked");
         } else if ($(controlEl).is("select")) {
             controlEl = $(controlEl).find("option:selected");
+        } else if ($(controlEl).attr("type") === "hidden") {
+            controlEl = $(controlEl).filter("input[type=hidden]");
         }
         
         if ($(controlEl).length > 0) {
@@ -215,8 +217,14 @@ VisibilityMonitor.prototype.triggerChange = function(targetEl, names) {
 };
 VisibilityMonitor.prototype.handleRadio = function(targetEl, names) {
     $.each(names, function(i) {
-        $("[name=" + names[i] + "][checked].section-visibility-disabled").removeProp("checked").prop("data-checked", "checked");
-        $("[name=" + names[i] + "][checked]:not(.section-visibility-disabled)").prop("checked", "checked");
-        $("[name=" + names[i] + "][data-checked]:not(.section-visibility-disabled)").removeProp("data-checked").prop("checked", "checked");
+        $("[name=" + names[i] + "][checked]").removeProp("checked").removeAttr("checked").attr("data-checked", "checked");
+        $("[name=" + names[i] + "][data-checked]").each(function(){
+            //check if not in visibility disabled section
+            if ($(this).closest(".form-section.section-visibility-hidden, .subform-section.section-visibility-hidden").length === 0) {
+                if ($(this).is("[data-checked]")) {
+                    $(this).removeProp("data-checked").prop("checked", "checked");
+                }
+            }
+        });
     });
 };

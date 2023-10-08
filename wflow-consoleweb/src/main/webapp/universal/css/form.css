@@ -151,6 +151,22 @@ body .editor-cell select:not([class^=ui]){
   color: inherit;
 }
 
+body input[disabled],
+body input[readonly] {
+  cursor: not-allowed;
+  background-color: #eeeeee;
+}
+
+body input.no-manual-input{
+    cursor: text;
+    background-color: #fff;
+}
+
+body input[size],
+body .editor-cell input[size]{
+    width: auto;
+}
+
 body .mce-form input:not([type]),
 body .mce-form input[type=text],
 body .mce-form input[type=password],
@@ -463,7 +479,16 @@ body .editor-cell select:not([class^="ui-"]):focus{
 }
 
 body .close-icon:after {
-    right: 35px;
+    right: 28px;
+    bottom: 20px;
+}
+body .editor-celll .close-icon:after {
+    top:16px;
+    bottom: unset;
+}
+body.rtl .close-icon:after {
+    left: 28px;
+    right: unset;
 }
 
 body .hasDatepicker + a, body .hasDatepicker + img {
@@ -487,10 +512,10 @@ body.rtl .filter-cell .hasDatepicker + a, body.rtl .filter-cell .hasDatepicker +
     margin-right: -21px;
 }
 body .filter-cell input.hasDatepicker {
-    padding-right: 25px;
+    padding-right: 40px;
 }
 body.rtl .filter-cell input.hasDatepicker {
-    padding-left: 25px;
+    padding-left: 40px;
     padding-right: auto;
 }
 
@@ -535,7 +560,6 @@ body .form-container .pq-td-div label.label + span:not(.form-cell-value):not(.su
 
 body .form-column, body .subform-column {
     max-width: 99%;
-    margin: 0 0.5%;
     color: inherit;
     min-width: inherit;
 }
@@ -543,6 +567,7 @@ body .form-column, body .subform-column {
 body .form-cell, body .subform-cell {
     color: inherit;
     padding: 0;
+    margin: 0 15px;
 }
 
 body .subform-cell-validator, body .form-cell-validator {
@@ -914,7 +939,7 @@ body #form-canvas .form-error-message {
 }
 
 body .form-cell .tablesaw thead tr:first-child th, body .subform-cell .tablesaw thead tr:first-child th,
-body .form-cell .grid td, body .form-cell .grid th, body .subform-cell .grid td, body .subform-cell .grid th {
+body .form-cell .grid:not(.adgrid) td, body .form-cell .grid:not(.adgrid) th, body .subform-cell .grid:not(.adgrid) td, body .subform-cell .grid:not(.adgrid) th {
     border:0;
     padding:8px;
 }

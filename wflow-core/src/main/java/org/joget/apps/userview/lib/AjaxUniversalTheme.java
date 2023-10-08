@@ -47,7 +47,7 @@ public class AjaxUniversalTheme extends UniversalTheme implements SupportBuilder
         String jscss = "";
         jscss += super.getInternalJsCssLib(data);
         if (!isAjaxContent(data) && !"true".equalsIgnoreCase(userview.getParamString("isPreview")) && !(data.get("is_login_page") != null && ((Boolean) data.get("is_login_page"))) && !(data.get("is_popup_view") != null && ((Boolean) data.get("is_popup_view")))) {
-            jscss += "\n<script src=\"" + data.get("context_path") + "/ajaxuniversal/js/ajaxtheme.js\" async></script>";
+            jscss += "\n<script src=\"" + data.get("context_path") + "/ajaxuniversal/js/ajaxtheme.js\" defer></script>";
             jscss += "\n<script>" + getContentPlaceholderRules() + "</script>";
         }
         return jscss;
@@ -61,7 +61,11 @@ public class AjaxUniversalTheme extends UniversalTheme implements SupportBuilder
                 data.put("userview_menu_alert", "<script>alert(\"" + StringUtil.escapeString(processor.getAlertMessage(), StringUtil.TYPE_JAVASCIPT, null) + "\");</script>");
             }
             if (processor.getRedirectUrl() != null && !processor.getRedirectUrl().isEmpty() && !isCurrentUserviewUrl(processor.getRedirectUrl())) {
-                data.put("content", "<script>top.location.href = \""+processor.getRedirectUrl()+"\";</script>");
+                String redirectUrl = processor.getRedirectUrl(); //the redirect url from UserviewThemeProcesser.handleMenuResponse() usually without context path
+                if (redirectUrl.startsWith("/web/")) {
+                    redirectUrl = data.get("context_path") + redirectUrl;
+                }
+                data.put("content", "<script>window.location.href = \""+redirectUrl+"\";</script>");
                 processor.setRedirectUrl(null);
             }
             
@@ -114,7 +118,11 @@ public class AjaxUniversalTheme extends UniversalTheme implements SupportBuilder
     @Override
     public String getContentContainer(Map<String, Object> data) {
         if (isAjaxContent(data)) {
-            data.put("content_inner_before", getBreadcrumb(data));
+            String contentInnerBefore = getBreadcrumb(data);
+            if (getPropertyString("fontControl").equalsIgnoreCase("true")) {
+                contentInnerBefore += getFontSizeController(data);
+            }
+            data.put("content_inner_before", contentInnerBefore);
             return null;
         } else {
             return super.getContentContainer(data);
@@ -165,13 +173,17 @@ public class AjaxUniversalTheme extends UniversalTheme implements SupportBuilder
 
             jsCssLink += "<style>" + generateLessCss() + "</style>";
 
-            jsCssLink += "<script src=\"" + data.get("context_path") + "/wro/ajaxuniversal.min.js\" async></script>\n";
+            jsCssLink += "<script src=\"" + data.get("context_path") + "/wro/ajaxuniversal.min.js\" defer></script>\n";
 
             if (enableResponsiveSwitch()) {
                 jsCssLink += "<script src=\"" + data.get("context_path") + "/universal/lib/responsive-switch.min.js\" defer></script>\n";
             } 
             jsCssLink += "<script>var _enableResponsiveTable = true;</script>\n";
             jsCssLink += getInternalJsCssLib(data);
+            if ("true".equals(getPropertyString("darkMode"))) {
+                jsCssLink += "<script src=\"" + data.get("context_path") + "/wro/darkTheme.js\" defer></script>\n";
+                jsCssLink += "<link rel=\"stylesheet\" href=\"" + data.get("context_path") + "/wro/darkTheme.css\"></link>\n";
+            }
             
             if (MobileUtil.isIE()) {
                 jsCssLink += "<script src=\"" + data.get("context_path") + "/js/ie/fetch.js\"></script>\n";
@@ -252,8 +264,10 @@ public class AjaxUniversalTheme extends UniversalTheme implements SupportBuilder
         String name = "<div class=\"login_form_brand\">";
         if (!getPropertyString("logo").isEmpty()) {
             name += "<div class=\"login_form_logo_container\"><img class=\"logo\" alt=\"logo\" src=\""+getPropertyString("logo")+"\" /></div>";
+        } else {
+            name += "<div class=\"login_form_logo_container\"><i class=\"fas fa-user-circle\"></i></div>";
         }
-        name += "<h1>" + userview.getPropertyString("name") + "</h1></div>";
+        name += "<h1>" + ResourceBundleUtil.getMessage("console.login.label.loginTo") + " " + userview.getPropertyString("name") + "</h1></div>";
         data.put("login_form_inner_before", name);
         return super.getLoginForm(data);
     }
@@ -278,7 +292,7 @@ public class AjaxUniversalTheme extends UniversalTheme implements SupportBuilder
         String css = ":root{";
         if (!getPropertyString("dx8colorScheme").isEmpty()) {
             String[] colors = getPropertyString("dx8colorScheme").split(";");
-            for (int i=0; i < 6; i++) {
+            for (int i=0; i < colors.length; i++) {
                 if (!colors[i].isEmpty()) {
                     css += "--theme-color"+(i+1)+":"+colors[i]+ ";";
                 }
@@ -500,5 +514,34 @@ public class AjaxUniversalTheme extends UniversalTheme implements SupportBuilder
             }
         }
         return html;
+    }
+    @Override
+   protected String getNavbar(Map<String, Object> data) {
+        String html = "<div class=\"nav-no-collapse header-nav\"><ul class=\"nav pull-right\">\n";
+        html += getHomeLink(data);
+        if ((Boolean) data.get("is_logged_in")) {
+            html += getInbox(data);
+        }
+        html += getShortcut(data);
+        if ("true".equals(getPropertyString("darkMode"))) {
+            html += getThemeSwitch(data);
+        }
+        html += getUserMenu(data);
+        html += "</ul></div>\n";
+        return html;
+    }
+    
+    protected String getThemeSwitch(Map<String, Object> data) {
+        return "<li class=\"theme-selection dropdown\">\n"
+                + "    <a data-toggle=\"dropdown\" href=\"javascript:;\" class=\"btn dropdown-toggle\">\n"
+                + "	 <i class=\"zmdi zmdi-brightness-6\"></i>\n"
+                + "    </a>\n"
+                + "    <ul id=\"theme-selector\" class=\"dropdown-menu themes\">\n"
+                + "        <div id=\"dropdown-title\"><span class=\"header\">" + ResourceBundleUtil.getMessage("theme.ajaxUniversalTheme.darkTheme.appearance") + "</span></div>\n"
+                + "        <li data-value=\"light\"><span class=\"header\">" + ResourceBundleUtil.getMessage("theme.ajaxUniversalTheme.darkTheme.lightTheme") + "</span></li>\n"
+                + "        <li data-value=\"dark\"><span class=\"header\">" + ResourceBundleUtil.getMessage("theme.ajaxUniversalTheme.darkTheme.darkTheme") + "</span></li>\n"
+                + "        <li data-value=\"auto\"><span class=\"header\">" + ResourceBundleUtil.getMessage("theme.ajaxUniversalTheme.darkTheme.deviceTheme") + "</span></li>\n"
+                + "    </ul>\n"
+                + "<li>";
     }
 }

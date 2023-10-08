@@ -42,7 +42,6 @@ import org.eclipse.jgit.api.RemoteRemoveCommand;
 import org.eclipse.jgit.api.errors.CheckoutConflictException;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.JGitInternalException;
-import org.eclipse.jgit.api.errors.RefNotAdvertisedException;
 import org.eclipse.jgit.api.errors.RefNotFoundException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.lib.ObjectId;
@@ -58,6 +57,7 @@ import org.eclipse.jgit.transport.TrackingRefUpdate;
 import org.eclipse.jgit.transport.URIish;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.eclipse.jgit.util.FS;
+import org.eclipse.jgit.util.SystemReader;
 import org.hibernate.proxy.HibernateProxy;
 import org.joget.apps.app.dao.AppDefinitionDao;
 import org.joget.apps.app.model.AppDefinition;
@@ -210,9 +210,12 @@ public class AppDevUtil {
         FS fs = null;
         if (HostManager.isVirtualHostEnabled()) {
             fs = FS.DETECTED;
-            File config = new File(projectDir.getAbsolutePath() + File.separator + "gitconfig");
-            fs.setGitSystemConfig(config);
-            fs.setUserHome(projectDir);
+            fs.setUserHome(new File(getAppDevBaseDirectory()));
+            
+            //to support multitenant read config 
+            if (!(SystemReader.getInstance() instanceof MultiTenantGitSystemReader)) {
+                SystemReader.setInstance(new MultiTenantGitSystemReader());
+            }
         }
 
         Git git = Git.init()
@@ -820,7 +823,7 @@ public class AppDevUtil {
                         }
                     }
                 }
-            } catch(RefNotFoundException | RefNotAdvertisedException | JGitInternalException | URISyntaxException ne) {
+            } catch(Exception ne) {
                 LogUtil.debug(AppDevUtil.class.getName(), "Fail to pull from Git remote repo " + appDef.getAppId() + ". Reason :" + ne.getMessage());
             }
             
@@ -1091,7 +1094,7 @@ public class AppDevUtil {
                     }
                 }
             }
-        } catch(RefNotFoundException | RefNotAdvertisedException | JGitInternalException | URISyntaxException re) {
+        } catch(Exception re) {
             LogUtil.debug(AppDevUtil.class.getName(), "Fail to pull from Git remote repo " + appDefinition.getAppId() + ". Reason :" + re.getMessage());
         }
         File file = new File(projectDir, path);
@@ -1488,7 +1491,6 @@ public class AppDevUtil {
     }    
     
     public static AppDefinition dirSyncApp(String appId, Long appVersion) throws IOException, GitAPIException, URISyntaxException {
-        AppDefinition updatedAppDef = null;
         if (appVersion == null) {
             return null;
         }
@@ -1501,6 +1503,17 @@ public class AppDevUtil {
             appDef = AppDevUtil.createDummyAppDefinition(appId, appVersion);
             isAppDefExist = false;
         }
+        
+        return dirSyncApp(appDef, isAppDefExist);
+    }
+    
+    public static AppDefinition dirSyncApp(AppDefinition appDef) throws IOException, GitAPIException, URISyntaxException {
+        return dirSyncApp(appDef, false);
+    }
+    
+    public static AppDefinition dirSyncApp(AppDefinition appDef, boolean isAppDefExist) throws IOException, GitAPIException, URISyntaxException {
+        AppDefinition updatedAppDef = null;
+        AppDefinitionDao appDefinitionDao = (AppDefinitionDao)AppUtil.getApplicationContext().getBean("appDefinitionDao");
         
         File projectDir = null;
         if (appDef.getVersion() != null) {
@@ -1516,7 +1529,7 @@ public class AppDevUtil {
             //if not new app or during setup & not current userview app id, run it in background
             HttpServletRequest request = WorkflowUtil.getHttpServletRequest();
             if (isAppDefExist && !(request != null && 
-                    (request.getRequestURI().contains("/userview/"+appId+"/") || 
+                    (request.getRequestURI().contains("/userview/"+appDef.getAppId()+"/") || 
                      request.getRequestURI().contains("/setup/init") || 
                      request.getRequestURI().contains("/web/desktop")))) {
                 // first time init project files in background

@@ -35,6 +35,7 @@ UserviewBuilder = {
             callbacks : {
                 "initComponent" : "UserviewBuilder.initComponent",
                 "renderElement" : "UserviewBuilder.renderElement",
+                "decorateBoxActions" : "UserviewBuilder.decorateBoxActions",
                 "selectElement" : "UserviewBuilder.selectElement",
                 "updateElementId" : "UserviewBuilder.updateElementId",
                 "unselectElement" : "UserviewBuilder.unselectElement",
@@ -42,7 +43,6 @@ UserviewBuilder = {
             }
         }, function() {
             CustomBuilder.Builder.setHead('<link data-datalist-style href="' + CustomBuilder.contextPath + '/css/datalist8.css" rel="stylesheet" />');
-            CustomBuilder.Builder.setHead('<link data-datalist-card-style href="' + CustomBuilder.contextPath + '/css/datalist_cardlayout.css" rel="stylesheet" />');
             CustomBuilder.Builder.setHead('<link data-form-style href="' + CustomBuilder.contextPath + '/css/form8.css" rel="stylesheet" />');
             CustomBuilder.Builder.setHead('<link data-userview-style href="' + CustomBuilder.contextPath + '/css/userview8.css" rel="stylesheet" />');
             CustomBuilder.Builder.setHead('<link data-ubuilder-style href="' + CustomBuilder.contextPath + '/css/ubuilder.css" rel="stylesheet" />');
@@ -53,7 +53,6 @@ UserviewBuilder = {
             $("#iframe_screenshot").on("load", function(){
                 var frameHead = $(UserviewBuilder.screenshotFrame.contentWindow.document).find("head");
                 frameHead.append('<link data-datalist-style href="' + CustomBuilder.contextPath + '/css/datalist8.css" rel="stylesheet" />');
-                frameHead.append('<link data-datalist-card-style href="' + CustomBuilder.contextPath + '/css/datalist_cardlayout.css" rel="stylesheet" />');
                 frameHead.append('<link data-form-style href="' + CustomBuilder.contextPath + '/css/form8.css" rel="stylesheet" />');
                 frameHead.append('<link data-userview-style href="' + CustomBuilder.contextPath + '/css/userview8.css" rel="stylesheet" />');
                 frameHead.append('<link data-ubuilder-style href="' + CustomBuilder.contextPath + '/css/ubuilder.css" rel="stylesheet" />');
@@ -532,6 +531,14 @@ UserviewBuilder = {
     },
     
     /*
+     * Retrieve the builder item name
+     */
+    getBuilderItemName : function() {
+        var props = UserviewBuilder.getBuilderProperties();
+        return props['userviewName'];
+    },
+    
+    /*
      * Save properties from properties view
      */
     saveBuilderProperties : function(container, properties) {
@@ -669,8 +676,12 @@ UserviewBuilder = {
                 
             UserviewBuilder.loadContentPage();
         } else {
+            //hide viewport buttons & set to desktop size
+            $("#top-panel .responsive-buttons").hide();
+            CustomBuilder.viewport("desktop");
+            
             $(".components-list > li").show();
-            $("[data-section='components-Page-Components']").hide();
+            $("[data-section].page_components_palette").hide();
             
             if(data.properties === null || data.properties === undefined){
                 data = UserviewBuilder.initDefaultUserviewDataModel();
@@ -717,11 +728,14 @@ UserviewBuilder = {
      * Load and render content page, called from UserviewBuilder.load
      */
     loadContentPage : function() {
+        //show viewport buttons
+        $("#top-panel .responsive-buttons").show();
+            
         $("body").addClass("page-component-editor");
         $("#save-content-btn").removeClass("hasChange");
         
         $(".components-list > li").hide();
-        $("[data-section='components-Page-Components']").show();
+        $("[data-section].page_components_palette").show();
         
         var menu = UserviewBuilder.selectedMenu;
         if (menu.referencePage === undefined) {
@@ -1527,6 +1541,40 @@ UserviewBuilder = {
     },
     
     /*
+     * A callback method called from the default component.builderTemplate.decorateBoxActions method.
+     * It used to add the button for add categories
+     */
+    decorateBoxActions : function(element, elementObj, component, box) {
+        var builder = CustomBuilder.Builder;
+        
+        if (elementObj.className === "userview-categories") {
+            $(box).find(".element-options").append('<a class="category-btn" title="'+get_cbuilder_msg('ubuilder.addCategory')+'"><i class="las la-plus"></i></a>');
+            
+            $(box).find(".category-btn").off("click");
+            $(box).find(".category-btn").on("click", function(event) {
+                builder.boxActionSetElement(event);
+                
+                UserviewBuilder.addCategory(true);
+                
+                event.preventDefault();
+                return false;
+            });
+        } else if (elementObj.className === "org.joget.apps.userview.model.UserviewCategory") {
+            $(box).find(".element-bottom-actions").append('<a class="add-category-btn" title="'+get_cbuilder_msg("ubuilder.addCategory")+'"><i class="las la-plus"></i></a>');
+            
+            $(box).find(".add-category-btn").off("click");
+            $(box).find(".add-category-btn").on("click", function(event) {
+                builder.boxActionSetElement(event);
+                
+                UserviewBuilder.addCategory();
+                
+                event.preventDefault();
+                return false;
+            });
+        }
+    },
+    
+    /*
      * A callback method called from the default component.builderTemplate.selectNode method.
      * It used to listen to navigator scroll event
      */
@@ -1542,31 +1590,7 @@ UserviewBuilder = {
             var menuId = self.frameBody.find(".userview-body-content").attr("data-ubuilder-menuid");
             self.selectNode(self.frameBody.find('[data-cbuilder-id="'+menuId+'"]'));
             return;
-        } else if (elementObj.className === "userview-categories") {
-            $("#element-select-box #element-options").append('<a id="category-btn" href="" title="'+get_cbuilder_msg('ubuilder.addCategory')+'"><i class="las la-plus"></i></a>');
-            
-            $("#category-btn").off("click");
-            $("#category-btn").on("click", function(event) {
-                $("#element-select-box").hide();
-                
-                UserviewBuilder.addCategory(true);
-                
-                event.preventDefault();
-                return false;
-            });
         } else if (elementObj.className === "org.joget.apps.userview.model.UserviewCategory") {
-            $("#element-select-box #element-bottom-actions").append('<a id="add-category-btn" href="" title="'+get_cbuilder_msg("ubuilder.addCategory")+'"><i class="las la-plus"></i></a>');
-            
-            $("#add-category-btn").off("click");
-            $("#add-category-btn").on("click", function(event) {
-                $("#element-select-box").hide();
-                
-                UserviewBuilder.addCategory();
-                
-                event.preventDefault();
-                return false;
-            });
-            
             var firstMenu = $(element).find(".menu-container li.menu:eq(0)");
             if ($(firstMenu).length > 0) {
                 UserviewBuilder.showMenuSnapshot($(firstMenu).attr("id"));
@@ -1634,10 +1658,12 @@ UserviewBuilder = {
                 }
             };
 
-            var classname = UserviewBuilder.selectedMenu.className;
-            var component = self.getComponent(classname);
-            if (component.builderTemplate.supportPageBuilder === undefined || component.builderTemplate.supportPageBuilder === true) {
-                self.frameBody.find("#btn_container").show();
+            if (UserviewBuilder.selectedMenu) {
+                var classname = UserviewBuilder.selectedMenu.className;
+                var component = self.getComponent(classname);
+                if (component.builderTemplate.supportPageBuilder === undefined || component.builderTemplate.supportPageBuilder === true) {
+                    self.frameBody.find("#btn_container").show();
+                }
             }
 
             if (UserviewBuilder.screenshots[screenshotKey] === undefined) {
@@ -1792,6 +1818,7 @@ UserviewBuilder = {
                         label = CustomBuilder.availablePermission[label];
                     } else {
                         label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                        label = '<span class="missing-plugin">' + label + '</span>';
                     }
                     permissionLabel.push(label);
                 }
@@ -1805,6 +1832,7 @@ UserviewBuilder = {
                                 label = FormBuilder.availablePermission[label];
                             } else {
                                 label += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                                label = '<span class="missing-plugin">' + label + '</span>';
                             }
                             if ($.inArray(label, permissionLabel) === -1) {
                                 permissionLabel.push(label);
@@ -2092,6 +2120,8 @@ UserviewBuilder = {
             var menuObj = UserviewBuilder.selectedMenu;
             if (menuObj !== undefined && menuObj.properties.customId !== undefined && menuObj.properties.customId !== "") {
                 menuId = menuObj.properties.customId;
+            } else {
+                menuId = menuObj.properties.id;
             }
             menuId = "/" + menuId;
         } else {
@@ -2201,7 +2231,20 @@ UserviewBuilder = {
                 var target = $(iframe.contentWindow.document).find("body");
                 
                 CustomBuilder.getScreenshot(target, function(image){
-                    callback(image);
+                    
+                    //resize image
+                    const img = new Image();
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      const ctx = canvas.getContext('2d');
+                      canvas.width = 700;
+                      canvas.height = 500;
+                      ctx.drawImage(img, 0, 0, 700, 500);
+                      const resizedBase64 = canvas.toDataURL('image/jpeg');
+                      callback(resizedBase64);
+                    };
+                    img.src = image;
+                    
                     $(iframe).remove();
                 }, function(error) {
                     $(iframe).remove();

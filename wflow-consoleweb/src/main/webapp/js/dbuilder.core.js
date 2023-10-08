@@ -10,6 +10,12 @@ DatalistBuilder = {
     filterIndexCounter : 0,
     actionIndexCounter : 0,
     
+    chosenColumns : new Array(),
+    chosenActions : new Array(),
+    chosenRowActions : new Array(),
+    chosenFilters : new Array(),
+
+    availableDisplayColumns : {},
     availableActions : {},
     availableFilters : {},
     availableFormatters : {},
@@ -29,7 +35,7 @@ DatalistBuilder = {
                 "renderElement" : "DatalistBuilder.renderElement",
                 "updateElementId" : "DatalistBuilder.updateElementId",
                 "unloadElement" : "DatalistBuilder.unloadElement",
-                "selectElement" : "DatalistBuilder.selectElement",
+                "decorateBoxActions" : "DatalistBuilder.decorateBoxActions",
                 "pasteElement" : "DatalistBuilder.pasteElement",
                 "renderXray" : "DatalistBuilder.renderXray",
                 "parseDataToComponent" : "DatalistBuilder.parseDataToComponent",
@@ -123,18 +129,6 @@ DatalistBuilder = {
         deferreds.push(wait);
         
         if(mode === DatalistBuilder.UPDATE){
-            //reset all fields
-            CustomBuilder.data.filters = new Array();
-            CustomBuilder.data.columns = new Array();
-            CustomBuilder.data.actions = new Array();
-            CustomBuilder.data.rowActions = new Array();
-            DatalistBuilder.columnIndexCounter = 0;
-            DatalistBuilder.rowActionIndexCounter = 0;
-            DatalistBuilder.filterIndexCounter = 0;
-            DatalistBuilder.actionIndexCounter = 0;
-            
-            CustomBuilder.data['orderBy'] = "";
-            CustomBuilder.data['order'] = "";
             if (CustomBuilder.data['pageSizeSelectorOptions'] === undefined) {
                 CustomBuilder.data['pageSizeSelectorOptions'] = "10,20,30,40,50,100";
             }
@@ -143,9 +137,7 @@ DatalistBuilder = {
         wait.resolve();
         
         $.when.apply($, deferreds).then(function() {
-            if (DatalistBuilder.availableColumns !== null) {
-                CustomBuilder.update();
-            }
+            CustomBuilder.update();
             DatalistBuilder.load(CustomBuilder.data);
         });
     },
@@ -300,6 +292,7 @@ DatalistBuilder = {
             self.frameBody.append(html);
             self.frameBody.find(".dataList").data("data", CustomBuilder.data);
             self.frameBody.find(".dataList").attr("data-cbuilder-id", CustomBuilder.data.id);
+            self.frameBody.find(".dataList").attr("id", CustomBuilder.data.id);
             
             self.frameBody.find(".dataList [data-placeholder-key]:not([data-cbuilder-sync])").each(function(){
                 if ($(this).closest("[data-cbuilder-replicate]").length === 0) {
@@ -391,6 +384,8 @@ DatalistBuilder = {
                     }
                 }
                 $("#iframe-wrapper").show();
+                
+                DatalistBuilder.afterUpdate(CustomBuilder.data);
             });
         });
     },
@@ -688,7 +683,8 @@ DatalistBuilder = {
             CustomBuilder.cachedAjax({
                 type: "POST",
                 data: {
-                    "json": JSON.encode(data.template)
+                    "json": JSON.encode(data.template),
+                    "listId" : CustomBuilder.data.id
                 },
                 url: CustomBuilder.contextPath + '/web/dbuilder/getRenderingTemplate',
                 dataType : "text",
@@ -710,7 +706,8 @@ DatalistBuilder = {
                 className : '',
                 properties : {}
             };
-            DatalistBuilder.template = '<table class="xrounded_shadowed responsivetable defaulttemplate expandfirst">\
+            DatalistBuilder.template = '<style>body{overflow: visible;min-width:fit-content;}.dataList{min-width: max-content;}</style>\
+                                        <table class="xrounded_shadowed responsivetable defaulttemplate expandfirst">\
                                             <thead>\
                                                 {{columns data-cbuilder-sort-horizontal data-cbuilder-prepend data-cbuilder-style="[{\'class\' : \'td\', \'label\' : \'Body\'}, {\'prefix\' : \'header\', \'class\' : \'th\', \'label\' : \'Header\'}]"}}\
                                                     <tr>\
@@ -721,7 +718,7 @@ DatalistBuilder = {
                                                         {{rowActions data-cbuilder-sort-horizontal data-cbuilder-style="[{\'class\' : \'.rowAction_body\', \'label\' : \'Body\'}, {\'prefix\' : \'header\', \'class\' : \'.rowAction_header\', \'label\' : \'Header\'}, {\'prefix\' : \'link\', \'class\' : \'.rowAction_body > a\', \'label\' : \'Link\'}]"}}\
                                                             <th>\
                                                                 {{rowAction}}\
-                                                                    <div class="rowAction rowAction_header">{{header_label|| }}<span class="overlay"></span></div>\
+                                                                    <div class="rowAction rowAction_header" data-cbuilder-visible>{{header_label|| }}<span class="overlay"></span></div>\
                                                                 {{rowAction}}\
                                                             </th>\
                                                         {{rowActions}}\
@@ -775,9 +772,12 @@ DatalistBuilder = {
             ).error(
                 function () {
                     if (CustomBuilder.data.binder.className !== undefined && CustomBuilder.data.binder.className !== "") {
-                        alert(get_cbuilder_msg('dbuilder.errorRetrieveColumns'));
+                        CustomBuilder.showMessage(get_cbuilder_msg('dbuilder.errorRetrieveColumns'), "danger", true);
                     }
-                    wait.resolve();
+                    DatalistBuilder.retrieveColumnsCallback({
+                        sample : DatalistBuilder.sampleData,
+                        columns : []
+                    }, wait);
                 }
             );
         } else {
@@ -790,6 +790,13 @@ DatalistBuilder = {
      */
     retrieveColumnsCallback : function(data, deferrer) {
         CustomBuilder.clearPaletteCategory(get_cbuilder_msg('dbuilder.columnsFilters'));
+        
+        //clear missing columns
+        for (var i in CustomBuilder.paletteElements) {
+            if (CustomBuilder.paletteElements[i].isMissingColumn !== undefined) {
+                delete CustomBuilder.paletteElements[i];
+            }
+        }
         
         DatalistBuilder.sampleData = data.sample;
         
@@ -807,137 +814,204 @@ DatalistBuilder = {
             }
             fields[temp.id] = temp;
             
-            var cssClass = "";
-            if (column.name === column.label) {
-                cssClass = " key";
-            }
-            var meta = {
-                filterable : column.filterable,
-                builderTemplate : {
-                    'getParentContainerAttr' : function(elementObj, component) {
-                        if (elementObj === undefined || elementObj === null) {
-                            if (component.filterable) {
-                                return "columns_filters";
-                            } else {
-                                return "columns";
-                            }
-                        } else if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
-                            return "filters";
-                        } else {
-                            return "columns";
-                        }
-                    },
-                    'getParentDataHolder' : function(elementObj, component) {
-                        var self = CustomBuilder.Builder;
-                        var parent = null;
-                        if (self.dragElement) {
-                            parent = self.dragElement.parent();
-                        } else if (self.selectedEl) {
-                            parent = self.selectedEl.parent();
-                        }
-                        if (parent !== null && $(parent).is("[data-placeholder-key]") && $(parent).attr('data-placeholder-key').indexOf('column_') === 0) {
-                            return $(parent).attr('data-placeholder-key');
-                        } else {
-                            if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
-                                return "filters";
-                            } else {
-                                return "columns";
-                            }
-                        }
-                    },
-                    'getLabel' : function(elementObj, component) {
-                        if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
-                            var className = "org.joget.apps.datalist.lib.TextFieldDataListFilterType";
-                            if (elementObj.type !== undefined && elementObj.type.className !== undefined && elementObj.type.className !== "") {
-                                className = elementObj.type.className;
-                            }
-                            return DatalistBuilder.availableFilters[className];
-                        } else {
-                            return elementObj.name;
-                        }
-                    },
-                    'dragging' : function(dragElement, component) {
-                        if ($(dragElement).parent().is("[data-placeholder-key]")) {
-                            dragElement = DatalistBuilder.draggingElement(dragElement, component);
-                        } else if (!$(dragElement).is("span.filter-cell")) { //is filter
-                            var replace = $('<span class="filter-cell "><input type="text" size="10" placeholder="'+UI.escapeHTML(component.label)+'"/></span></div>');
-                            dragElement.replaceWith(replace);
-                            dragElement = replace;
-                            
-                            CustomBuilder.Builder.frameBody.find("[data-cbuilder-dragSubElement]").remove();
-                        }
-                        return dragElement;
-                    },
-                    'customPropertiesData' : function(props, elementObj, component) {
-                        if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) {
-                            props.datalist_type = 'filter';
-                        } else {
-                            props.datalist_type = 'column';
-                        }
-                        return props;
-                    },
-                    'customPropertyOptions' : function(elementOptions, element, elementObj, paletteElement) {
-                        if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) {
-                            return DatalistBuilder.getFilterPropertiesDefinition();
-                        } else {
-                            return DatalistBuilder.getColumnPropertiesDefinition();
-                        }
-                    },
-                    'getStylePropertiesDefinition' : function(elementObj, component) {
-                        if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) {
-                            return component.builderTemplate.stylePropertiesDefinition;
-                        } else {
-                            return DatalistBuilder.getElementStylePropertiesDefinition(elementObj, component);
-                        }
-                    },
-                    'isPastable' : function(elementObj, component){
-                        var copied = CustomBuilder.getCopiedElement();
-                        if (copied !== null && copied !== undefined) {
-                            return true;
-                        }
-                        return false;
-                    },
-                    'renderPermission' : function(row, elementObj, permissionObj, key, level) {
-                        if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
-                            PermissionManager.renderElementDefault(elementObj, row, permissionObj, key, level);
-                        } else {
-                            DatalistBuilder.renderColumnPermission(elementObj, row, permissionObj, key, level);
-                        }
-                    },
-                    'navigable' : false,
-                    'dragHtml' : '<span></span>'
-                }
-            };
-        
-            //populate palette
-            CustomBuilder.initPaletteElement(get_cbuilder_msg('dbuilder.columnsFilters'), temp.name, temp.displayLabel, '<i class="far fa-hdd"></i>', {}, {}, true, cssClass, meta);
+            DatalistBuilder.initColumn(column, false);
         }
         DatalistBuilder.availableColumns = fields;
         
-        //remove not exist columns and filters
+        var change = false;
+        
+        //handle non exist columns and filters
+        var missingColumns = [];
         var i = CustomBuilder.data.filters.length;
         while (i--) {
             var filter = CustomBuilder.data.filters[i];
             if (DatalistBuilder.availableColumns[filter.name] === undefined) { 
-                CustomBuilder.data.filters.splice(i, 1);
+                if ($.inArray(filter.name, missingColumns) === -1) {
+                    missingColumns.push(filter.name);
+                }
             } 
         }
         var i = CustomBuilder.data.columns.length;
         while (i--) {
             var column = CustomBuilder.data.columns[i];
-            if (DatalistBuilder.availableColumns[column.name] === undefined) { 
-                CustomBuilder.data.columns.splice(i, 1);
+            if (column.name !== undefined && DatalistBuilder.availableColumns[column.name] === undefined) { 
+                if ($.inArray(column.name, missingColumns) === -1) {
+                    missingColumns.push(column.name);
+                }
             } 
+        }
+        
+        if (missingColumns.length > 0) {
+            for(var e in missingColumns){
+                var column = {
+                    id : missingColumns[e],
+                    name : missingColumns[e],
+                    label : get_cbuilder_msg('cbuilder.missing') + " ("+missingColumns[e]+")",
+                    displayLabel : get_cbuilder_msg('cbuilder.missing') + " ("+missingColumns[e]+")",
+                    filterable : false
+                };
+
+                DatalistBuilder.initColumn(column, true);
+            }
         }
         
         //handle order by
         if (CustomBuilder.data.orderBy !== undefined && CustomBuilder.data.orderBy !== "") {
             if (DatalistBuilder.availableColumns[CustomBuilder.data.orderBy] === undefined) { 
                 CustomBuilder.data.orderBy = "";
+                change = true;
             }
         }
         
+        if (change) {
+            CustomBuilder.update(false);
+        }
+        
         deferrer.resolve();
+    },
+    
+    initColumn: function(column, isMissing) {
+        var cssClass = "";
+        if (column.name === column.label) {
+            cssClass = " key";
+        }
+        var meta = {
+            filterable : column.filterable,
+            builderTemplate : {
+                'getParentContainerAttr' : function(elementObj, component) {
+                    if (elementObj === undefined || elementObj === null) {
+                        if (component.filterable) {
+                            return "columns_filters";
+                        } else {
+                            return "columns";
+                        }
+                    } else if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
+                        return "filters";
+                    } else {
+                        return "columns";
+                    }
+                },
+                'getParentDataHolder' : function(elementObj, component) {
+                    var self = CustomBuilder.Builder;
+                    var parent = null;
+                    if (self.dragElement) {
+                        parent = self.dragElement.parent();
+                    } else if (self.selectedEl) {
+                        parent = self.selectedEl.parent();
+                    }
+                    if (parent !== null && $(parent).is("[data-placeholder-key]") && $(parent).attr('data-placeholder-key').indexOf('column_') === 0) {
+                        return $(parent).attr('data-placeholder-key');
+                    } else {
+                        if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
+                            return "filters";
+                        } else {
+                            return "columns";
+                        }
+                    }
+                },
+                'getLabel' : function(elementObj, component) {
+                    if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
+                        var className = "org.joget.apps.datalist.lib.TextFieldDataListFilterType";
+                        if (elementObj.type !== undefined && elementObj.type.className !== undefined && elementObj.type.className !== "") {
+                            className = elementObj.type.className;
+                        }
+                        return DatalistBuilder.availableFilters[className];
+                    } else {
+                        return elementObj.name;
+                    }
+                },
+                'dragging' : function(dragElement, component) {
+                    if ($(dragElement).parent().is("[data-placeholder-key]")) {
+                        dragElement = DatalistBuilder.draggingElement(dragElement, component);
+                    } else if (!$(dragElement).is("span.filter-cell")) { //is filter
+                        var replace = $('<span class="filter-cell "><input type="text" size="10" placeholder="'+UI.escapeHTML(component.label)+'"/></span></div>');
+                        dragElement.replaceWith(replace);
+                        dragElement = replace;
+
+                        CustomBuilder.Builder.frameBody.find("[data-cbuilder-dragSubElement]").remove();
+                    }
+                    return dragElement;
+                },
+                'afterMoved' : function(element, elementObj, component) {
+                    var syncElements = $(element).data("syncElements");
+                    if ($(element).parent().is("[data-placeholder-key]") 
+                            && syncElements !== undefined && syncElements !== null && syncElements.length > 0) {
+                        DatalistBuilder.syncElements(element, elementObj, component, syncElements);
+                    }
+                },
+                'customPropertiesData' : function(props, elementObj, component) {
+                    if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) {
+                        props.datalist_type = 'filter';
+                    } else {
+                        props.datalist_type = 'column';
+                    }
+                    return props;
+                },
+                'customPropertyOptions' : function(elementOptions, element, elementObj, paletteElement) {
+                    if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) {
+                        return DatalistBuilder.getFilterPropertiesDefinition();
+                    } else {
+                        return DatalistBuilder.getColumnPropertiesDefinition();
+                    }
+                },
+                'getStylePropertiesDefinition' : function(elementObj, component) {
+                    if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) {
+                        return component.builderTemplate.stylePropertiesDefinition;
+                    } else {
+                        return DatalistBuilder.getElementStylePropertiesDefinition(elementObj, component);
+                    }
+                },
+                'isPastable' : function(elementObj, component){
+                    var copied = CustomBuilder.getCopiedElement();
+                    if (copied !== null && copied !== undefined) {
+                        return true;
+                    }
+                    return false;
+                },
+                'renderPermission' : function(row, elementObj, permissionObj, key, level) {
+                    if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) !== -1) {
+                        PermissionManager.renderElementDefault(elementObj, row, permissionObj, key, level);
+                    } else {
+                        DatalistBuilder.renderColumnPermission(elementObj, row, permissionObj, key, level);
+                    }
+                },
+                'navigable' : false,
+                'dragHtml' : '<span></span>'
+            }
+        };
+
+        if (isMissing) {
+            CustomBuilder.Builder.frameBody.find("[data-cbuilder-classname='"+column.name+"']").attr("data-cbuilder-missing-plugin", "");
+            
+            meta['builderTemplate']['render'] = function(element, elementObj, component, callback) {
+                var newcallback = function(element) {
+                    $(element).attr("data-cbuilder-missing-plugin", "");
+                    callback(element);
+                };
+                if (CustomBuilder.Builder.options.callbacks["renderElement"] !== undefined && CustomBuilder.Builder.options.callbacks["renderElement"] !== "") {
+                    CustomBuilder.callback(CustomBuilder.Builder.options.callbacks["renderElement"], [element, elementObj, component, newcallback]);
+                } else if (callback) {
+                    newcallback(element);
+                }
+            };
+            meta['builderTemplate']['isPastable'] = function(elementObj, component){
+                return false;
+            };
+            meta['builderTemplate']['getLabel'] = function(elementObj, component) {
+                return component.label;
+            };
+            meta['builderTemplate']['draggable'] = false;
+            meta['builderTemplate']['movable'] = false;
+            meta['builderTemplate']['deletable'] = true;
+            meta['builderTemplate']['copyable'] = false;
+            meta['builderTemplate']['navigable'] = false;
+            meta["isMissingColumn"] = true;
+
+            CustomBuilder.initPaletteElement("", column.name, column.displayLabel, "", "", "", false, "", meta);
+        } else {
+            //populate palette
+            CustomBuilder.initPaletteElement(get_cbuilder_msg('dbuilder.columnsFilters'), column.name, column.displayLabel, '<i class="far fa-hdd"></i>', {}, {}, true, cssClass, meta);
+        }
     },
     
     /*
@@ -1018,6 +1092,60 @@ DatalistBuilder = {
         $.getJSON(
             CustomBuilder.contextPath + '/web/json/console/app/' + CustomBuilder.appId + '/' +  CustomBuilder.appVersion + '/builder/actions',
             function(returnedData){
+                
+                if (returnedData.displayColumns) {
+                    for(var e in returnedData.displayColumns){
+                        var column = returnedData.displayColumns[e];
+                        
+                        DatalistBuilder.availableDisplayColumns[column.className] = column;
+                        var icon = column.icon;
+                        if (icon === undefined || icon === null && icon === "") {
+                            icon = '<i class="fas fa-info"></i>';
+                        }
+                        
+                        var meta = {
+                            isDisplayColumn : true,
+                            builderTemplate : {
+                                'customPropertyOptions' : function(elementOptions, element, elementObj, paletteElement) {
+                                    return DatalistBuilder.getDisplayColumnPropertiesDefinition(elementOptions);
+                                },
+                                'dragging' : function(dragElement, component) {
+                                    dragElement = DatalistBuilder.draggingElement(dragElement, component);
+                                    return dragElement;
+                                },
+                                'afterMoved' : function(element, elementObj, component) {
+                                    var syncElements = $(element).data("syncElements");
+                                    if ($(element).parent().is("[data-placeholder-key]") 
+                                            && syncElements !== undefined && syncElements !== null && syncElements.length > 0) {
+                                        DatalistBuilder.syncElements(element, elementObj, component, syncElements);
+                                    }
+                                },
+                                'getStylePropertiesDefinition' : function(elementObj, component) {
+                                    return DatalistBuilder.getElementStylePropertiesDefinition(elementObj, component);
+                                },
+                                'renderPermission' : function(row, elementObj, permissionObj, key, level) {
+                                    DatalistBuilder.renderColumnPermission(elementObj, row, permissionObj, key, level);
+                                },
+                                'parentContainerAttr' : 'columns',
+                                'parentDataHolder' : 'columns',
+                                'navigable' : false,
+                                'dragHtml' : '<span></span>'
+                            }
+                        };
+                        
+                        if (column.jscomponent !== undefined && column.jscomponent !== "" && column.jscomponent !== null) {
+                            try {
+                                var temp = eval('[' + column.jscomponent + ']')[0];  
+                                meta.builderTemplate = $.extend(true, meta.builderTemplate, temp);
+                            } catch (err){
+                                //ignore
+                            }
+                        }
+
+                        CustomBuilder.initPaletteElement(get_cbuilder_msg('dbuilder.displayColumns'), column.className, column.label, icon, column.propertyOptions, column.defaultPropertyValues, true, "", meta);
+                    }
+                }
+                
                 for(e in returnedData.actions){
                     var action = returnedData.actions[e];
                     
@@ -1077,6 +1205,13 @@ DatalistBuilder = {
                                     CustomBuilder.Builder.frameBody.find("[data-cbuilder-dragSubElement]").remove();
                                 }
                                 return dragElement;
+                            },
+                            'afterMoved' : function(element, elementObj, component) {
+                                var syncElements = $(element).data("syncElements");
+                                if ($(element).parent().is("[data-placeholder-key]") 
+                                        && syncElements !== undefined && syncElements !== null && syncElements.length > 0) {
+                                    DatalistBuilder.syncElements(element, elementObj, component, syncElements);
+                                }
                             },
                             'customPropertiesData' : function(props, elementObj, component) {
                                 if (elementObj.id.indexOf(DatalistBuilder.rowActionPrefix) === 0) {
@@ -1191,7 +1326,12 @@ DatalistBuilder = {
             id : DatalistBuilder.getId(type)
         };
         
-        if (type === "filter" || type === "column") {
+        if (component.isDisplayColumn) {
+            elementObj.className = component.className;
+            elementObj.properties = $.extend(true, {}, component.properties);
+            elementObj.properties.label = component.label;
+            elementObj.properties.id = elementObj.id;
+        } else if (type === "filter" || type === "column") {
             elementObj.name = component.className;
             elementObj.label = component.label;
             
@@ -1212,7 +1352,11 @@ DatalistBuilder = {
             elementObj.properties.label = component.label;
             
             if (type === "rowAction") {
-                elementObj.properties['link-css-display-type'] = 'btn btn-sm btn-primary';
+                if (component.className === 'org.joget.apps.datalist.lib.FormRowDeleteDataListAction') {
+                    elementObj.properties['link-css-display-type'] = 'btn btn-sm btn-danger';
+                } else {
+                    elementObj.properties['link-css-display-type'] = 'btn btn-sm btn-primary';
+                }
             }
         }
 
@@ -1231,6 +1375,10 @@ DatalistBuilder = {
     
     draggingElement : function(dragElement, component) {
         var key = $(dragElement).parent().attr('data-placeholder-key');
+        if (key === undefined) {
+            return dragElement;
+        }
+        
         var data = component.label;
         var rowData = DatalistBuilder.sampleData;
         if (rowData !== undefined && rowData !== null 
@@ -1348,6 +1496,41 @@ DatalistBuilder = {
         return dragElement;
     },
     
+    /**
+     * Sync the table body cells after moving column using left right button
+     */
+    syncElements : function(element, elementObj, component, syncElements) {
+        var key = $(element).parent().attr('data-placeholder-key');
+        if (CustomBuilder.Builder.frameBody.find(".dataList [data-placeholder-key=\""+key+"\"][data-cbuilder-sync]").length > 0) {
+            var index = $(element).parent().find("> *").index($(element));
+            
+            //move to the index
+            for (var i in syncElements) {
+                var cIndex = $(syncElements[i]).parent().find('> *').index($(syncElements[i]));
+                if (index === 0) {
+                    $(syncElements[i]).parent().prepend(syncElements[i]);
+                } else if (cIndex < index) {
+                    $(syncElements[i]).parent().find('> *:eq('+(index)+')').after(syncElements[i]);
+                } else {
+                    $(syncElements[i]).parent().find('> *:eq('+(index-1)+')').after(syncElements[i]);
+                }
+
+                if (key.indexOf("rowAction") === 0) {
+                    var width = $(element).width();
+                    var synceWidth = $(element[i]).width();
+                    if (synceWidth > width) {
+                        $(element).width(synceWidth);
+                    } else {
+                        $(syncElements[i]).width(width);
+                    }
+                }
+                DatalistBuilder.updateStyle(syncElements[i], elementObj, component, $(element).parent());
+            }
+            
+            DatalistBuilder.adjustTableOverlaySize($(element).closest(".dataList"));
+        }
+    },
+    
     /*
      * Utility method to retrieve unique id based on type
      */
@@ -1374,6 +1557,8 @@ DatalistBuilder = {
             DatalistBuilder.renderAction(element, elementObj, component, deferrer);
         } else if (elementObj.id.indexOf(DatalistBuilder.rowActionPrefix) === 0) {
             DatalistBuilder.renderRowActions(element, elementObj, component, deferrer);
+        } else if (component.isDisplayColumn) {
+            DatalistBuilder.renderColumn(element, elementObj, component, deferrer);
         } else if (elementObj.id === CustomBuilder.data.id) {
             DatalistBuilder.updateDatalistStyle(element, elementObj, component, deferrer);
         }
@@ -1458,6 +1643,9 @@ DatalistBuilder = {
         var self = CustomBuilder.Builder;
         
         var value = elementObj.label;
+        if (component.isDisplayColumn) {
+            value = component.label;
+        }
         var rowData = DatalistBuilder.sampleData;
         if (rowData !== undefined && rowData !== null) {
             if (rowData[elementObj.name] !== undefined && rowData[elementObj.name] !== null && rowData[elementObj.name] !== "") {
@@ -1468,7 +1656,7 @@ DatalistBuilder = {
         }
         
         var formatDeferrer = $.Deferred();
-        if (elementObj.format !== undefined && elementObj.format.className !== undefined && elementObj.format.className !== "") {
+        if ((DatalistBuilder.availableColumns[elementObj.name] !== undefined && elementObj.format !== undefined && elementObj.format.className !== undefined && elementObj.format.className !== "") || component.isDisplayColumn) {
             var colStr = JSON.encode(elementObj);
             var rowStr = JSON.encode(rowData);
 
@@ -1479,7 +1667,9 @@ DatalistBuilder = {
                     "value" : value,
                     "row" : rowStr,
                     "appId" : CustomBuilder.appId,
-                    "listId" : CustomBuilder.data.id
+                    "listId" : CustomBuilder.data.id,
+                    "binderJson" : JSON.encode(CustomBuilder.data.binder.properties),
+                    "binderId" : CustomBuilder.data.binder.className
                 },
                 url: CustomBuilder.contextPath + '/web/dbuilder/getFormatterTemplate',
                 dataType : "json",
@@ -1506,6 +1696,11 @@ DatalistBuilder = {
 
         $.when.apply($, [formatDeferrer]).then(function() {
             var obj = $.extend(true, {}, elementObj);
+            if (component.isDisplayColumn) {
+                obj = $.extend(true, {}, elementObj.properties);
+            } else {
+                obj = $.extend(true, {}, elementObj);
+            }
             obj.body = '<span>' + value + '</span>';
             var html = DatalistBuilder.convertTemplate($(element).parent().attr('data-placeholder-template'), obj);
             var replace = $(html);
@@ -1780,8 +1975,12 @@ DatalistBuilder = {
             var height = $(table).height();
             var thHeight = $(table).find("thead").height();
             var bottom = height - thHeight;
-            $(table).find("thead .overlay").each(function(){
+            $(table).find("thead th > .overlay").each(function(){
                 $(this).css("bottom", "-" + bottom + "px");
+            });
+            $(table).find("thead th.rowActions > div > .overlay").each(function(){
+                $(this).css("top", "-10px");
+                $(this).css("bottom", "-" + (bottom + 13) + "px");
             });
         }
     },
@@ -1799,10 +1998,10 @@ DatalistBuilder = {
     },
     
     /*
-     * A callback method called from the default component.builderTemplate.selectNode method.
-     * It used to add column and add section action button when a section is selected
+     * A callback method called from the default component.builderTemplate.decorateBoxActions method.
+     * It used to add the syling options for all elements
      */
-    selectElement : function(element, elementObj, component) {
+    decorateBoxActions : function(element, elementObj, component, box) {
         var builder = CustomBuilder.Builder;
         
         var type = "";
@@ -1816,10 +2015,16 @@ DatalistBuilder = {
             type = "rowAction";
         }
         
+        if ($(element).is("[data-cbuilder-missing-plugin]")) {
+            return;
+        }
+        
         if (type !== "") {
-            $("#element-options").append('<a id="default-style-btn" href="" title="'+get_cbuilder_msg('style.defaultStyles')+'" style=""><i class="las la-palette"></i></a>');
-            $("#default-style-btn").off("click");
-            $("#default-style-btn").on("click", function(){
+            $(box).find(".element-options").append('<a class="default-style-btn" title="'+get_cbuilder_msg('style.defaultStyles')+'" style=""><i class="las la-palette"></i></a>');
+            $(box).find(".default-style-btn").off("click");
+            $(box).find(".default-style-btn").on("click", function(event){
+                builder.boxActionSetElement(event);
+                
                 $("body").removeClass("no-right-panel");
                 $("#element-properties-tab-link").hide();
                 $("#right-panel #element-properties-tab").find(".property-editor-container").remove();
@@ -1927,9 +2132,17 @@ DatalistBuilder = {
      */
     renderXray : function(detailsDiv, element, elementObj, component , callback) {
         var dl = detailsDiv.find('dl');
-        
-        if (elementObj.id.indexOf(DatalistBuilder.columnPrefix) === 0) {
-            dl.find('> *:eq(1)').text(elementObj.name);
+        if ((elementObj.id.indexOf(DatalistBuilder.columnPrefix) === 0 || elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) && elementObj.name !== undefined) {
+            dl.append('<dt><i class="las la-user" title="' + get_cbuilder_msg('cbuilder.name') + '"></i></dt><dd>' + elementObj.name + '</dd>');
+        } 
+        if (component.isDisplayColumn) {
+            dl.append('<dt><i class="las la-user" title="' + get_cbuilder_msg('cbuilder.name') + '"></i></dt><dd>' + elementObj.properties.label + '</dd>');
+            
+            //to make it consistent hight
+            dl.append('<dt>&nbsp;</dt><dd>&nbsp;</dd>');
+            dl.append('<dt>&nbsp;</dt><dd>&nbsp;</dd>');
+        } else if (elementObj.id.indexOf(DatalistBuilder.columnPrefix) === 0) {
+            dl.find('> *:eq(1)').text(elementObj.datalist_type);
             var action = "-";
             if (elementObj.action !== undefined && elementObj.action.className !== undefined && elementObj.action.className !== "") {
                 action = elementObj.action.className;
@@ -1937,6 +2150,7 @@ DatalistBuilder = {
                     action = DatalistBuilder.availableActions[action].label;
                 } else {
                     action += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                    action = '<span class="missing-plugin">' + action + '</span>';
                 }
             }
             dl.append('<dt><i class="las la-link" title="'+get_cbuilder_msg('dbuilder.action')+'"></i></dt><dd>'+action+'</dd>');
@@ -1947,11 +2161,11 @@ DatalistBuilder = {
                     format = DatalistBuilder.availableFormatters[format];
                 } else {
                     format += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                    format = '<span class="missing-plugin">' + format + '</span>';
                 }
             }
             dl.append('<dt><i class="las la-paint-brush" title="'+get_cbuilder_msg('dbuilder.formatter')+'"></i></dt><dd>'+format+'</dd>');
         } else if (elementObj.id.indexOf(DatalistBuilder.filterPrefix) === 0) {
-            dl.find('> *:eq(1)').text(elementObj.name);
             var type = "-";
             if (elementObj.type !== undefined && elementObj.type.className !== undefined && elementObj.type.className !== "") {
                 type = elementObj.type.className;
@@ -1959,9 +2173,10 @@ DatalistBuilder = {
                     type = DatalistBuilder.availableFilters[type];
                 } else {
                     type += " ("+get_advtool_msg('dependency.tree.Missing.Plugin')+")";
+                    type = '<span class="missing-plugin">' + type + '</span>';
                 }
             }
-            dl.find("> *:eq(1)").after('<dt><i class="las la-cube" title="'+get_cbuilder_msg('dbuilder.filter')+'"></i></dt><dd>'+type+'</dd>');
+            dl.find('> *:eq(1)').text(type);
         } else if (elementObj.id.indexOf(DatalistBuilder.actionPrefix) === 0) {
             //nothing
         } else if (elementObj.id.indexOf(DatalistBuilder.rowActionPrefix) === 0) {
@@ -1974,7 +2189,11 @@ DatalistBuilder = {
                     }
                 }
             }
-            dl.append('<dt><i class="las la-eye" title="'+get_cbuilder_msg('dbuilder.rowAction.visibility')+'"></i></dt><dd>'+fields.join(', ')+'</dd>');
+            dl.append('<dt><i class="las la-eye" title="'+get_cbuilder_msg('dbuilder.rowAction.visibility')+'"></i></dt><dd>'+fields.join(', ')+'&nbsp;</dd>');
+            
+            //to make it consistent hight
+            dl.append('<dt>&nbsp;</dt><dd>&nbsp;</dd>');
+            dl.append('<dt>&nbsp;</dt><dd>&nbsp;</dd>');
         }
         
         callback();
@@ -2061,6 +2280,21 @@ DatalistBuilder = {
         var templateJson = "";
         if (CustomBuilder.data.template !== undefined && CustomBuilder.data.template !== null) {
             templateJson = JSON.encode(CustomBuilder.data.template);
+            
+            if (CustomBuilder.data.template.className !== properties.template.className) {
+                //change of template, prompt to check for remove custom style
+                if (confirm("Detected changing template. Do you want to remove previous custom styling?")) {
+                    CustomBuilder.clearCustomStyling(CustomBuilder.data, function(name){
+                        return (name.indexOf("-style-") !== -1 && (
+                                name.indexOf("action") === 0 ||
+                                name.indexOf("rowAction") === 0 ||
+                                name.indexOf("column") === 0 ||
+                                name.indexOf("filter") === 0 ||
+                                name.indexOf("card") === 0
+                                ));
+                    });
+                }
+            }
         }
         CustomBuilder.data = $.extend(CustomBuilder.data, properties);
         CustomBuilder.update();
@@ -2222,10 +2456,19 @@ DatalistBuilder = {
                     {
                         label : get_cbuilder_msg('dbuilder.rowActionsMode'),
                         name  : 'rowActionsMode',
-                        type : 'checkbox',
+                        type : 'selectbox',
                         options : [
-                            {label : '', value : 'true'}
+                            {label : get_cbuilder_msg('dbuilder.default'), value : ''},
+                            {label : get_cbuilder_msg('dbuilder.rowActionsMode.singlecolumn'), value : 'true'},
+                            {label : get_cbuilder_msg('dbuilder.rowActionsMode.dropdown'), value : 'dropdown'}
                         ]
+                    },
+                    {
+                        label : get_cbuilder_msg('dbuilder.rowActionsDropdownLabel'),
+                        name  : 'rowActionsDropdownLabel',
+                        type : 'textfield',
+                        control_field: 'rowActionsMode',
+                        control_value: 'dropdown',
                     },
                     {
                         label: get_cbuilder_msg('dbuilder.disableResponsive'),
@@ -2250,6 +2493,33 @@ DatalistBuilder = {
                         options : [
                             {value : 'true', label : ''}
                         ]
+                    },
+                    {
+                        label: get_cbuilder_msg('dbuilder.mobileCardLayout'),
+                        name: 'mobileCardLayout',
+                        type: 'header',
+                        control_field: 'disableResponsive',
+                        control_value: '',
+                    },
+                    {
+                        label: get_cbuilder_msg('dbuilder.cardCollapsible'),
+                        name: 'cardCollapsible',
+                        type: 'checkbox',
+                        options : [
+                            {value : 'true', label : ''}
+                        ],
+                        control_field: 'disableResponsive',
+                        control_value: '',
+                    },
+                    {
+                        label: get_cbuilder_msg('dbuilder.cardCollapseByDefault'),
+                        name: 'cardCollapseByDefault',
+                        type: 'checkbox',
+                        options : [
+                            {value : 'true', label : ''}
+                        ],
+                        control_field: 'cardExpanable',
+                        control_value: 'true',
                     }
                 ],
                 control_field: 'template',
@@ -2678,6 +2948,10 @@ DatalistBuilder = {
                         type : 'selectbox',
                         value : 'btn btn-sm btn-primary',
                         options : [{
+                            label : get_cbuilder_msg('dbuilder.default'),
+                            value : ''
+                        },
+                        {
                             label : get_cbuilder_msg('dbuilder.btn.link'),
                             value : 'btn btn-link'
                         },
@@ -2719,6 +2993,68 @@ DatalistBuilder = {
         }
         
         return component.rowActionPropertyOptions;
+    },
+    
+    /*
+     * Get properties definition for display column
+     */
+    getDisplayColumnPropertiesDefinition : function(elementOptions) {
+        if (elementOptions !== null && elementOptions !== undefined && elementOptions.length > 0) {
+            //add label & id field if does exist
+            var hasId = false;
+            var hasLabel = false;
+            var labelIndex = 0;
+            for (var p in elementOptions[0].properties) {
+                if (elementOptions[0].properties[p].name === "id") {
+                    hasId = true;
+                } else if (elementOptions[0].properties[p].name === "label") {
+                    hasLabel = true;
+                    labelIndex = p;
+                }
+            }
+            if (!hasId) {
+                elementOptions[0].properties.splice(labelIndex, 0 , {
+                    label : 'ID',
+                    name  : 'id',
+                    required : 'true',
+                    type : 'textfield',
+                    js_validation: "DatalistBuilder.validateDuplicateId",
+                    regex_validation: '^[a-zA-Z0-9_]+$',
+                    validation_message: get_cbuilder_msg("cbuilder.invalidId"),
+                    id_suggestion: 'label'
+                });
+            }
+            if (!hasLabel) {
+                elementOptions[0].properties.unshift({
+                    label : get_cbuilder_msg('dbuilder.label'),
+                    name  : 'label',
+                    required : 'true',
+                    type : 'textfield'
+                });
+            }
+            return elementOptions;
+        } else {
+            return [{
+                title : get_cbuilder_msg('dbuilder.general'),
+                properties :[
+                {
+                    label : get_cbuilder_msg('dbuilder.label'),
+                    name  : 'label',
+                    required : 'true',
+                    type : 'textfield'
+                },
+                {
+                    label : 'ID',
+                    name  : 'id',
+                    required : 'true',
+                    type : 'textfield',
+                    js_validation: "DatalistBuilder.validateDuplicateId",
+                    regex_validation: '^[a-zA-Z0-9_]+$',
+                    validation_message: get_cbuilder_msg("cbuilder.invalidId"),
+                    id_suggestion: 'label'
+                }]
+            }];
+        }
     },
     
     /*
@@ -2822,6 +3158,8 @@ DatalistBuilder = {
         var table = self.frameBody.find(".dataList table.responsivetable");
         if (table.length > 0) {
             self.iframe.contentWindow.responsiveTable($(datalist));
+        } else {
+            $(window).off("resize."+$(datalist).attr("id"));
         }
         self.iframe.contentWindow.responsiveTemplate();
     },
@@ -2845,5 +3183,127 @@ DatalistBuilder = {
      */            
     unloadBuilder : function() {
         $("#binder-btn").remove();
-    } 
+    },
+    
+    /*
+     * Check and remove orphaned columns 
+     */ 
+    beforeMerge : function() {
+        var self = CustomBuilder.Builder;
+        
+        var change = false;
+        
+        var ids = [];
+        for(var ee in DatalistBuilder.availableColumns){
+            ids.push(DatalistBuilder.availableColumns[ee].id);
+        }
+        
+        
+        //find all placeholder key
+        var placeholder = [];
+        self.frameBody.find(".dataList [data-placeholder-key]").each(function(){
+            if ($.inArray($(this).data("placeholder-key"), placeholder) === -1) {
+                placeholder.push($(this).data("placeholder-key"));
+            }
+        });
+        
+        //remove unused placeholder in data
+        for (var prop in CustomBuilder.data) {
+            if (Object.prototype.hasOwnProperty.call(CustomBuilder.data, prop) && (prop.indexOf("column") === 0 || prop.indexOf("rowAction") === 0 || prop === "filters")) {
+                if ($.inArray(prop, placeholder) === -1 && prop !== "filters") {
+                    if (prop === "columns"  || prop === "rowActions") {
+                        CustomBuilder.data[prop] = [];
+                    } else if (prop.indexOf("-style-") === -1 && prop !== "rowActionsMode" && prop !== "rowActionsDropdownLabel") {
+                        delete CustomBuilder.data[prop];
+                    }
+                    change = true;
+                } else if (prop.indexOf("column") === 0 || prop === "filters") {
+                    var nonExistIndex = [];
+                    
+                    for (var i in CustomBuilder.data[prop]) {
+                        var name = CustomBuilder.data[prop][i].name;
+                        if (name !== undefined && $.inArray(name, ids) === -1) {
+                            nonExistIndex.push(i);
+                            
+                            //find and remove from canvas
+                            var id = CustomBuilder.data[prop][i].id;
+                            var element;
+                            
+                            if (prop === "filters") {
+                                element = self.frameBody.find(".dataList [data-cbuilder-filters] [data-cbuilder-id='"+id+"']");
+                            } else {
+                                element = self.frameBody.find(".dataList [data-placeholder-key='"+prop+"'] [data-cbuilder-id='"+id+"']");
+                            }
+                            
+                            var syncElements = $(element).data("syncElements");
+                            if (syncElements !== null && syncElements !== undefined) {
+                                for (var i in syncElements) {
+                                    $(syncElements[i]).remove();
+                                }
+                            }
+                            
+                            $(element).remove();
+                        }
+                    }
+                    
+                    //remove non exist column 
+                    if (nonExistIndex.length > 0) {
+                        nonExistIndex.reverse();
+                        for (var i in nonExistIndex) {
+                            CustomBuilder.data[prop].splice(nonExistIndex[i], 1);
+                            change = true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (change) {
+            $("#element-parent-box, #element-highlight-box").hide();
+            CustomBuilder.Builder.selectNode(false);
+            CustomBuilder.update(false);
+        }
+    },
+    
+    /*
+     * update the variables used by other plugins for backward compatible
+     */
+    afterUpdate : function(data) {
+        DatalistBuilder.chosenColumns = [];
+        DatalistBuilder.chosenActions = [];
+        DatalistBuilder.chosenRowActions = [];
+        DatalistBuilder.chosenFilters = [];
+        
+        for (var prop in CustomBuilder.data) {
+            if (Object.prototype.hasOwnProperty.call(CustomBuilder.data, prop) 
+                    && (prop.indexOf("column") === 0  || prop.indexOf("rowAction") === 0 
+                    || prop === "filters" || prop === "actions")) {
+                for (var i in CustomBuilder.data[prop]) {
+                    var id =  CustomBuilder.data[prop][i].id;
+                       
+                    if (prop === "columns") {
+                        DatalistBuilder.chosenColumns[id] = CustomBuilder.data[prop][i];
+                    } else if (prop === "rowActions" || prop.indexOf("rowAction") === 0) {
+                        DatalistBuilder.chosenRowActions[id] = CustomBuilder.data[prop][i];
+                    } else if (prop === "filters") {
+                        DatalistBuilder.chosenFilters[id] = CustomBuilder.data[prop][i];
+                    } else if (prop === "actions") {
+                        DatalistBuilder.chosenActions[id] = CustomBuilder.data[prop][i];
+                    }
+                }
+            }
+        }
+    },
+            
+    /*
+     * Validation for duplicate id of columns
+     */
+    validateDuplicateId : function (name, value) {
+        var self = CustomBuilder.Builder;
+        var found = $(self.selectedEl).parent().find('[data-cbuilder-id="'+value+'"]');
+        if (found.length > 0 && !(found.length === 1 && found.is(self.selectedEl))) {
+            return get_cbuilder_msg("cbuilder.duplicateId");
+        }
+        return null;
+    }
 }

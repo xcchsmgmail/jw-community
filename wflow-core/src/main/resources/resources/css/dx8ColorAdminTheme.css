@@ -1,10 +1,11 @@
 body{
-    font-family: 'Roboto', sans-serif; 
-    font-size: 13px;
-    font-weight: 300;
+    font-family: 'Roboto', -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif;
+    font-size: 14px;
+    font-weight: 400;
 }
 header.navbar{
     box-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
+    border-bottom: 1px solid rgba(0,0,0,.0625);
 }
 .header-nav a.btn{
     font-size: 20px;
@@ -26,6 +27,7 @@ header.navbar .inbox-notification .dropdown-toggle:after{
 }
 #sidebar{
     border-right: 0px;
+    box-shadow: none;
 }
 .sidebar_brand{
     background-color: var(--theme-header, var(--theme-color6, #fff));
@@ -35,21 +37,21 @@ header.navbar .inbox-notification .dropdown-toggle:after{
 .sidebar_brand #header-link{
     font-size: 18px; 
     text-transform: uppercase; 
-    font-weight: 300;
+    font-weight: 500;
 }
 #sidebar .nav-tabs.user-menu{
     border-bottom: 1px solid #26323847;
 }
 #sidebar .nav > li > a{
-    font-size: 13px;
-    font-weight: 300;
+    font-size: 14px;
+    font-weight: 400;
     line-height: 25px;
+    opacity: 0.8;
 }
 #sidebar .nav > li:not(.active) > a:hover,
 #sidebar .nav > li > ul > li > a:hover,
 #sidebar .nav > li > ul > li.active > a{
     background: var(--theme-sidebar-link-bg, transparent) !important; 
-    font-weight: 500;
 }
 #sidebar .nav > li.active > a,
 #sidebar .nav > li > ul > li.active > a{
@@ -62,7 +64,15 @@ header.navbar .inbox-notification .dropdown-toggle:after{
     display: none;
 }
 #sidebar .nav > li > ul > li > a{
-    font-size: 100%;
+    font-size: 13px;
+    opacity: 0.8;
+}
+body:not(.horizontal_menu) #sidebar .nav > li.active > ul{
+    background: var(--theme-sidebar-active-link-bg, transparent) !important;
+    margin-top: 0px;
+}
+body:not(.horizontal_menu) #sidebar .nav > li > ul {
+    background: var(--theme-sidebar-link-bg, transparent) !important;
 }
 #sidebar .badge{
     border-radius: 3px; 
@@ -126,7 +136,7 @@ header.navbar .inbox-notification .dropdown-toggle:after{
     background-color: var(--theme-content-background, #ffffff);
     border: 1px solid rgba(0,0,0,.0625);
     padding: 20px;
-    box-shadow: 0 2px 10px rgb(0 0 0 / 15%);
+    border-radius: 3px;
 }
 .grid-stack-item-body > .main-body-content > .ui-html,
 .grid-stack-item-body > .main-body-content > [class*="-body-content"]:not(.viewForm-body-content):not(.runProcess-body-content),
@@ -156,18 +166,19 @@ body.embeded .main-body-content > [class*="-body-content"]:not(.viewForm-body-co
     padding: 0 !important;
 }
 .form-section{
-    box-shadow: 0 2px 10px rgb(0 0 0 / 15%);
     border: 0;
+    box-shadow: none;
+    border-radius: 3px;
 }
-.form-section + .form-section{
-    box-shadow: 0 10px 10px rgb(0 0 0 / 15%);
+.subform-section{
+    border-radius: 3px;
 }
-.form-section-title{
+.form-section-title, .subform-section-title{
     background-color: var(--theme-heading-bg, var(--theme-color5,#fff));
     color: var(--theme-heading-color, var(--theme-color2, #ffffff));
     font-size: 16px; 
     border-radius: 3px 3px 0 0; 
-    padding: 10px;
+    padding: 12px;
 }
 #section-actions{
     box-shadow:none;
@@ -178,8 +189,8 @@ body.embeded .main-body-content > [class*="-body-content"]:not(.viewForm-body-co
     background-color: transparent; 
     border: 0; 
     text-align:right; 
-    background: #7a7a7a; 
-    color: #616161; 
+    background: #737373; 
+    color: #fff; 
     width: fit-content; 
     border-radius: 3px; 
     margin: 30px 0px 10px; 
@@ -221,15 +232,6 @@ div.exportlinks > a span {
     color:#000;
     font-weight: bold;
 }
-.dataList th.sortable a {
-    background-image:url("../images/v3/arrow_off.png");
-}
-.dataList th.order1 a {
-    background-image:url("../images/v3/arrow_down.png");
-}
-.dataList th.order2 a {
-    background-image:url("../images/v3/arrow_up.png");
-}
 .dataList tr.odd,
 .dataList tr.odd + tr.footable-row-detail{
     background-color: #ededed;
@@ -260,14 +262,14 @@ div.exportlinks > a span {
 }
 .dataList .row_action a:not(.btn){
     font-size: 13px;
-    background-color: #348fe2;
+    background-color: var(--theme-button-bg, #0d6efd);
     font-weight: 400;
     box-shadow: 0 0 2px rgb(0 0 0 / 20%), 0 4px 4px -2px rgb(0 0 0 / 20%);
     text-decoration: none !important;
 }
 #content main button[class*=button],
 #content main input[type=button][class*=button]{
-    background-color: var(--theme-button-bg, #348fe2);
+    background-color: var(--theme-button-bg, #0d6efd);
 }
 #content main button[class*=button]:hover,
 #content main button[class*=button]:focus,
@@ -278,7 +280,7 @@ div.exportlinks > a span {
     background-color: var(--theme-button-bg, #1c75c7);
 }
 .btn-primary, .btn-primary.disabled,.btn-primary:disabled {
-    background-color: var(--theme-button-bg, #348fe2);
+    background-color: var(--theme-button-bg, #0d6efd);
 }
 .btn-primary:hover, .btn-primary.focus,.btn-primary:focus {
     background-color: var(--theme-button-bg, #1c75c7);
@@ -323,7 +325,7 @@ div.exportlinks > a span {
     background-color: #d38109 !important;
 }
 .btn-danger, .btn-danger.disabled,.btn-danger:disabled {
-    background-color: #ff5b57 !important;
+    background-color: #dc3545 !important;
 }
 .btn-danger:hover, .btn-danger.focus,.btn-danger:focus {
     background-color: #ff2924 !important;
@@ -362,11 +364,18 @@ footer{
     background: var(--theme-footer-bg, var(--theme-background, #f9fafb));
 }
 
-body#login #page #content {
-    background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.45) 0, rgba(0, 0, 0, 0.9));
+body#login #page #content.page_content {
+    background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.45) 0, rgba(0, 0, 0, 0.2));
 }
 body#login #loginForm{
     background: transparent;
+    box-shadow: none;
+}
+#loginForm > div > h1 {
+    color: #fff;
+}
+body#login label {
+    color: #fff;
 }
 #loginForm table{
     width: 350px;
@@ -390,8 +399,7 @@ body#login #loginForm table td input[type='submit']{
 
 #content .grid-stack-item .grid-stack-item-content{
     background-color: var(--theme-content-background, #ffffff);
-    border: 1px solid rgba(0,0,0,.0625);
-    box-shadow: 0 2px 10px rgb(0 0 0 / 15%);
+    box-shadow: none;
 }
 #content .grid-stack-item .grid-stack-item-header{
     border-bottom: 1px solid #cfdbe2;
@@ -409,4 +417,38 @@ body#login #loginForm table td input[type='submit']{
 
 .fc-theme-bootstrap > .fc-view-harness{
     background-color: var(--theme-content-background, #ffffff);
+}
+
+body.popupBody .form-section-title, body.popupBody .subform-section-title {
+    color: var(--theme-font-color, #72777a) !important;
+    background: transparent;
+}
+
+input:focus, select:focus, textarea:focus {
+    box-shadow: 0 0 0 0.25rem rgba(52,143,226,.25);
+    border: 1px solid var(--theme-primary, var(--theme-color3, #007C01));
+    outline: 0;
+}
+
+.form-cell > label.label, .subform-cell > label.label {
+    font-weight: 500;
+}
+.userProfile-body-header{
+    border-radius: 3px 3px 0 0;
+}
+
+body.dark-mode .dataList th, body.dark-mode .dataList td {
+    border: 1px solid var(--theme-border-color);
+}
+body.dark-mode .dataList div.exportlinks {
+    background: var(--theme-secondary-button-bg);
+}
+body.dark-mode .breadcrumb li a {
+    color: var(--theme-link);
+}
+body.dark-mode .userProfile-body-content .userProfile-body-header {
+    border-bottom: 1px solid var(--theme-border-color) !important;
+}
+body.dark-mode .userProfile-body-content {
+    border: 1px solid var(--theme-border-color) !important;
 }

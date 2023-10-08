@@ -52,9 +52,12 @@ public class PluginDefaultPropertiesDaoImpl extends AbstractAppVersionedObjectDa
             PluginDefaultProperties props = super.loadById(id, appDefinition);
             
             if (props != null) {
-                element = new Element(cacheKey, (Serializable) props);
-                cache.put(element, appDefinition);
+                findSession().evict(props);
             }
+            
+            element = new Element(cacheKey, (Serializable) props); //for PluginDefaultProperties, store to cache even it is null. It is used by audit trail & hash variable
+            cache.put(element, appDefinition);
+            
             return props;
         }else{
             return (PluginDefaultProperties) element.getValue();

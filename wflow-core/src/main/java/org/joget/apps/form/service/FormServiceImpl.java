@@ -383,6 +383,17 @@ public class FormServiceImpl implements FormService {
             }
         }
         
+        //used to handle form menu stay after add new record submission, there is no id in query string to load the record.
+        if (formData.getPrimaryKeyValue() == null || formData.getPrimaryKeyValue().isEmpty()) {
+            if (formData.getRequestParameter(FormUtil.PROPERTY_ID) != null &&
+                        !formData.getRequestParameter(FormUtil.PROPERTY_ID).isEmpty()) {
+                formData.setPrimaryKeyValue(formData.getRequestParameter(FormUtil.PROPERTY_ID));
+            } else if (formData.getRequestParameter(FormUtil.FORM_META_ORIGINAL_ID) != null &&
+                        !formData.getRequestParameter(FormUtil.FORM_META_ORIGINAL_ID).isEmpty()) {
+                formData.setPrimaryKeyValue(formData.getRequestParameter(FormUtil.FORM_META_ORIGINAL_ID));
+            }
+        }
+        
         handleFiles(formData);
         handleErrors(formData);
         
@@ -399,7 +410,7 @@ public class FormServiceImpl implements FormService {
                     Iterator keys = errors.keys();
                     while (keys.hasNext()) {
                         String key = (String) keys.next();
-                        formData.addPreviousFormError(key, (String) errors.getString(key));
+                        formData.addPreviousFormError(key, (String) errors.get(key).toString());
                     }
                 }
             } catch (Exception e) {}
@@ -529,7 +540,7 @@ public class FormServiceImpl implements FormService {
      */
     @Override
     public FormData recursiveExecuteFormStoreBinders(Form form, Element element, FormData formData) {
-        if (!element.isReadonly(formData) && element.isAuthorize(formData)) {
+        if (!element.isReadonly(formData) && element.isAuthorize(formData) && element.continueValidation(formData)) {
 
             //load child element store binder to store before the main form
             Collection<Element> children = element.getChildren(formData);
@@ -566,6 +577,15 @@ public class FormServiceImpl implements FormService {
                     }
                     if (!tableName.isEmpty()) {
                         FileUtil.checkAndUpdateFileName(rowSet, tableName, null);
+                    }
+                }
+                
+                //check id is set for single row data, it may not set when there is no id field in the form
+                if (!rowSet.isMultiRow() && !rowSet.isEmpty() && 
+                        (rowSet.get(0).getId() == null || rowSet.get(0).getId().isEmpty())) {
+                    String primaryKey = element.getPrimaryKeyValue(formData);
+                    if (primaryKey != null && !primaryKey.isEmpty()) {
+                        rowSet.get(0).setId(primaryKey);
                     }
                 }
                 

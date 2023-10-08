@@ -13,6 +13,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,7 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.cookie.BasicClientCookie;
 import org.apache.http.ssl.SSLContextBuilder;
+import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Entities.EscapeMode;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -65,6 +67,7 @@ public class StringUtil {
     public static final String TYPE_SEPARATOR = "separator";
     public static final String TYPE_IMG2BASE64 = "img2base64";
     public static final String TYPE_EXP = "expression";
+    public static final String TYPE_DECIMAL = "decimal";
 
     static final Safelist whitelistRelaxed;
     static {
@@ -292,6 +295,16 @@ public class StringUtil {
     }
     
     /**
+     * Unescape a string based on format
+     * @param inStr input String
+     * @param format TYPE_HTML, TYPE_JAVA, TYPE_JAVASCIPT, TYPE_JSON, TYPE_SQL, TYPE_XML, TYPE_URL or TYPE_REGEX. Support chain escaping by separate the format in semicolon (;)
+     * @return 
+     */
+    public static String unescapeString(String inStr, String format) {
+        return unescapeString(inStr, format, null);
+    }
+    
+    /**
      * Unescape a string based on format and replaced string based on the replace keyword map
      * @param inStr input String
      * @param format TYPE_HTML, TYPE_JAVA, TYPE_JAVASCIPT, TYPE_JSON, TYPE_SQL, TYPE_XML, TYPE_URL or TYPE_REGEX. Support chain escaping by separate the format in semicolon (;)
@@ -339,7 +352,9 @@ public class StringUtil {
                 String newSeparator = f.substring(TYPE_SEPARATOR.length() + 1, f.length() -1);
                 String [] temps = inStr.split(newSeparator);
                 inStr = StringUtils.join(temps, ";");
-            }
+            } else if (f != null && f.startsWith(TYPE_DECIMAL)) {
+                inStr = inStr;
+            } 
         }
         
         return inStr;
@@ -399,11 +414,21 @@ public class StringUtil {
 
         return builder.toString();
     }
+    
+    /**
+     * Escape a string based on format
+     * @param inStr input String
+     * @param format TYPE_HTML, TYPE_JAVA, TYPE_JAVASCIPT, TYPE_JSON, TYPE_DECIMAL, TYPE_SQL, TYPE_XML, TYPE_URL or TYPE_REGEX. Support chain escaping by separate the format in semicolon (;)
+     * @return 
+     */
+    public static String escapeString(String inStr, String format) {
+        return escapeString(inStr, format, null);
+    }
 
     /**
      * Escape a string based on format and replaced string based on the replace keyword map
      * @param inStr input String
-     * @param format TYPE_HTML, TYPE_JAVA, TYPE_JAVASCIPT, TYPE_JSON, TYPE_SQL, TYPE_XML, TYPE_URL or TYPE_REGEX. Support chain escaping by separate the format in semicolon (;)
+     * @param format TYPE_HTML, TYPE_JAVA, TYPE_JAVASCIPT, TYPE_JSON, TYPE_DECIMAL, TYPE_SQL, TYPE_XML, TYPE_URL or TYPE_REGEX. Support chain escaping by separate the format in semicolon (;)
      * @param replaceMap A map of keyword and new keyword pair to be replaced before escaping
      * @return 
      */
@@ -450,7 +475,10 @@ public class StringUtil {
                 String newSeparator = f.substring(TYPE_SEPARATOR.length() + 1, f.length() -1);
                 String [] temps = inStr.split(";");
                 inStr = StringUtils.join(temps, newSeparator);
-            }
+            } else if (f != null && f.startsWith(TYPE_DECIMAL) ) {
+                String newDecimal = f.substring(TYPE_DECIMAL.length() + 1, f.length() -1);
+                inStr = StringUtil.numberFormat(inStr, "", "", "", false, newDecimal);
+            }           
         }
         
         return inStr;
@@ -773,14 +801,10 @@ public class StringUtil {
      */
     public static byte[] searchAndReplaceByteContent(byte[] bytes, String search, String replacement) {
         if (search != null && replacement != null) {
-            try {
-                String content = new String(bytes, "UTF-8");
-
-                content = content.replaceAll(StringUtil.escapeRegex(search), StringUtil.escapeRegex(replacement));
-                bytes = content.getBytes("UTF-8");
-            } catch (Exception e) {
-                //ignore
-            }
+            Map<String, String> replacements = new HashMap<String, String>();
+            replacements.put(search, replacement);
+            
+            bytes = searchAndReplaceByteContent(bytes, replacements);
         }
         return bytes;
     }
@@ -792,19 +816,205 @@ public class StringUtil {
      * @return 
      */
     public static byte[] searchAndReplaceByteContent(byte[] bytes, Map<String, String> replacements) {
+        return searchAndReplaceByteContent(bytes, replacements, null, null);
+    }
+    
+    /**
+     * Search keywords and replace it with corresponding new keyword in byte content
+     * @param bytes
+     * @param replacements
+     * @param startFromLine
+     * @param endAtLine
+     * @return 
+     */
+    public static byte[] searchAndReplaceByteContent(byte[] bytes, Map<String, String> replacements, Integer startFromLine, Integer endAtLine) {
         if (replacements != null && !replacements.isEmpty()) {
             try {
                 String content = new String(bytes, "UTF-8");
                 
-                for (String search : replacements.keySet()) {
-                    content = content.replaceAll(StringUtil.escapeRegex(search), StringUtil.escapeRegex(replacements.get(search)));
-                }
+                content = searchAndReplaceContent(content, replacements, false, startFromLine, endAtLine);
+                
                 bytes = content.getBytes("UTF-8");
             } catch (Exception e) {
                 //ignore
             }
         }
         return bytes;
+    }
+    
+    /**
+     * Search keywords and replace the first occurrence with corresponding new keyword in byte content
+     * @param bytes
+     * @param search
+     * @param replacement
+     * @return 
+     */
+    public static byte[] searchAndReplaceFirstByteContent(byte[] bytes, String search, String replacement) {
+        if (search != null && replacement != null) {
+            Map<String, String> replacements = new HashMap<String, String>();
+            replacements.put(search, replacement);
+            
+            bytes = searchAndReplaceFirstByteContent(bytes, replacements);
+        }
+        return bytes;
+    }
+    
+    /**
+     * Search keywords and replace the first occurrence with corresponding new keyword in byte content
+     * @param bytes
+     * @param replacements
+     * @return 
+     */
+    public static byte[] searchAndReplaceFirstByteContent(byte[] bytes, Map<String, String> replacements) {
+        return searchAndReplaceFirstByteContent(bytes, replacements, null, null);
+    }
+    
+    /**
+     * Search keywords and replace the first occurrence with corresponding new keyword in byte content
+     * @param bytes
+     * @param replacements
+     * @param startFromLine
+     * @param endAtLine
+     * @return 
+     */
+    public static byte[] searchAndReplaceFirstByteContent(byte[] bytes, Map<String, String> replacements, Integer startFromLine, Integer endAtLine) {
+        if (replacements != null && !replacements.isEmpty()) {
+            try {
+                String content = new String(bytes, "UTF-8");
+                
+                content = searchAndReplaceContent(content, replacements, true, startFromLine, endAtLine);
+                
+                bytes = content.getBytes("UTF-8");
+            } catch (Exception e) {
+                //ignore
+            }
+        }
+        return bytes;
+    }
+    
+    /**
+     * Search keywords and replace it with corresponding new keyword in content
+     * @param content
+     * @param replacements
+     * @param replaceFirst
+     * @param startFromLine
+     * @param endAtLine
+     * @return 
+     */
+    public static String searchAndReplaceContent(String content, Map<String, String> replacements, boolean replaceFirst, Integer startFromLine, Integer endAtLine) {
+        if (replacements != null && !replacements.isEmpty()) {
+            try {
+                int length = content.length();
+                int startIndex = 0;
+                String before = "";
+                String after = "";
+                Map<String, String> founds = new LinkedHashMap<String, String>();
+                String newLineChar = "\n";
+                if ((startFromLine != null && startFromLine > 0) || (endAtLine != null && endAtLine > 0)) {
+                    if (content.contains("\r\n")) {
+                        newLineChar = "\r\n";
+                    } else if (content.contains("\r")) {
+                        newLineChar = "\r";
+                    }
+                }
+                if (startFromLine != null && startFromLine > 0) {
+                    //find the newline char
+                    while (startFromLine-- > 0) {
+                        startIndex = content.indexOf(newLineChar, startIndex+1);
+                    }
+                    if (startIndex < 0) {
+                        return content; // the start line is reach the end, nothing to replace
+                    }
+                }
+                if (endAtLine != null && endAtLine > 0) {
+                    length = 0;
+                    //find the newline char
+                    while (endAtLine-- >= 0) {
+                        length = content.indexOf(newLineChar, length+1);
+                    }
+                    if (length < 0) {
+                        length = content.length();
+                    }
+                }
+                //prevent the replacement is done on the excluded line
+                if (startIndex > 0) {
+                    before = content.substring(0, startIndex);
+                }
+                if (length != content.length()) {
+                    after = content.substring(length);
+                }
+                if (!before.isEmpty() || !after.isEmpty()) {
+                    content = content.substring(startIndex, length);
+                    length = content.length();
+                }
+                
+                //keep the search to always search from the orginal content
+                for (String search : replacements.keySet()) {
+                    int index = 0; //since the content before start from line is moved to before variable, it should start from 0. 
+                    index = content.indexOf(search, index);
+                    String current = "";
+                    int start = 0;
+                    int end = 0;
+                    int space = 0;
+                    int slength = search.length();
+                    while (index != -1) {
+                        start = index;
+                        end = index + slength;
+                        //adding a few more chars in front or behind to locate the correct string when it is not break by space
+                        if (!search.startsWith(" ")) { 
+                            space = content.indexOf(" ", start - 5);
+                            if (space > start - 5 && space < start && space != -1) {  //if there is a space, start from space
+                                start = space;
+                            } else {
+                                start = start - 5;
+                            }
+                        }
+                        if (!search.endsWith(" ")){
+                            space = content.indexOf(" ", end);
+                            if (space < end + 5 && space != -1) {  //if there is a space within next 5 char, end at space
+                                end = space;
+                            } else {
+                                end = end + 5;
+                            }
+                        }
+                        if (start < 0) {
+                            start = 0;
+                        }
+                        if (end >= length) {
+                            end = length - 1;
+                        }
+                        current = content.substring(start, end);
+                        if (!founds.containsKey(current)) {
+                            founds.put(current, current.replaceAll(StringUtil.escapeRegex(search), StringUtil.escapeRegex(replacements.get(search))));
+                        }
+                        
+                        if (replaceFirst) {
+                            break;
+                        }
+                        
+                        index = content.indexOf(search, index + 1);
+                    }
+                }
+                
+                //actual replacement done after found all contents to be replaced
+                if (!founds.isEmpty()) {
+                    for (String found : founds.keySet()) {
+                        if (replaceFirst) {
+                            content = content.replaceFirst(StringUtil.escapeRegex(found), StringUtil.escapeRegex(founds.get(found)));
+                        } else {
+                            content = content.replaceAll(StringUtil.escapeRegex(found), StringUtil.escapeRegex(founds.get(found)));
+                        }
+                    }
+                }
+                
+                if (!before.isEmpty() || !after.isEmpty()) {
+                    content = before + content + after;
+                }
+            } catch (Exception e) {
+                //ignore
+            }
+        }
+        return content;
     }
     
     /**
@@ -993,4 +1203,20 @@ public class StringUtil {
         return newCondition;
     }
     
+    /**
+     * To fix the unclosed tags in the custom html
+     * @param content
+     * @return 
+     */
+    public static String fixUnclosedTags(String content) {
+        if (content != null && !content.isEmpty()) {
+            try {
+                Document doc = Jsoup.parseBodyFragment(content);
+                return doc.html();
+            } catch (Exception e) {
+                LogUtil.error(StringUtil.class.getName(), e, "Not able to fix unclosed tags");
+            }
+        }
+        return content;
+    }
 }

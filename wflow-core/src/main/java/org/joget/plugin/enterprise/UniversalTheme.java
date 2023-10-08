@@ -33,6 +33,7 @@ import org.joget.apps.userview.model.UserviewV5Theme;
 import org.joget.apps.userview.service.UserviewUtil;
 import org.joget.commons.util.LogUtil;
 import org.joget.commons.util.ResourceBundleUtil;
+import org.joget.commons.util.SecurityUtil;
 import org.joget.commons.util.StringUtil;
 import org.joget.commons.util.TimeZoneUtil;
 import org.joget.directory.model.User;
@@ -338,7 +339,7 @@ public class UniversalTheme extends UserviewV5Theme implements UserviewPwaTheme,
         
         jsCssLink += "<style>" + generateLessCss() + "</style>";
 
-        jsCssLink += "<script src=\"" + data.get("context_path") + "/wro/" + getPathName() + ".min.js\" async></script>\n";
+        jsCssLink += "<script src=\"" + data.get("context_path") + "/wro/" + getPathName() + ".min.js\" defer></script>\n";
         
         if (enableResponsiveSwitch()) {
             jsCssLink += "<script src=\"" + data.get("context_path") + "/" + getPathName() +"/lib/responsive-switch.min.js\" defer></script>\n";
@@ -582,7 +583,11 @@ public class UniversalTheme extends UserviewV5Theme implements UserviewPwaTheme,
         }
         
         // process LESS
-        String less = AppUtil.readPluginResource(getClass().getName(), "resources/themes/" + getPathName() + "/" + getPropertyString("themeScheme") + ".less");
+        String less = getLess();
+        if (less == null) {
+            less = AppUtil.readPluginResource(getClass().getName(), "resources/themes/" + SecurityUtil.normalizedFileName(getPathName()) + "/" + SecurityUtil.normalizedFileName(getPropertyString("themeScheme")) + ".less");
+        }        
+        
         less = lessVariables + "\n" + less;
         // read CSS from cache
         Cache cache = (Cache) AppUtil.getApplicationContext().getBean("cssCache");
@@ -602,6 +607,16 @@ public class UniversalTheme extends UserviewV5Theme implements UserviewPwaTheme,
             }
         }
         return css;
+    }
+    
+    protected String getLess() {
+        String path = getPathName();
+        String scheme = getPropertyString("themeScheme");
+        if ((path.equals("universal") || path.equals("progressive")) && (scheme.equals("dark") || scheme.equals("light"))) {
+            return AppUtil.readPluginResource(getClass().getName(), "resources/themes/" + path + "/" + scheme + ".less");
+        } else {
+            return null;
+        }
     }
 
     protected String compileLess(String less) {
@@ -904,7 +919,7 @@ public class UniversalTheme extends UserviewV5Theme implements UserviewPwaTheme,
     @Override
     public String getFooter(Map<String, Object> data) {
         if (enableResponsiveSwitch()) {
-            data.put("footer_inner_after", "<div id=\"responsiveSwitch\"><p><a href=\"#\" class=\"rs-link\" data-link-desktop=\""+ ResourceBundleUtil.getMessage("theme.universal.switchDesktop") +"\" data-link-responsive=\""+ ResourceBundleUtil.getMessage("theme.universal.switchMobile") +"\"></a></p></div>" + getPropertyString("subfooter"));
+            data.put("footer_inner_after", "<div id=\"responsiveSwitch\"><p><a href=\"#\" class=\"rs-link\" title=\""+ ResourceBundleUtil.getMessage("theme.universal.switchDesktop") +"\" data-link-desktop=\""+ ResourceBundleUtil.getMessage("theme.universal.switchDesktop") +"\" data-link-responsive=\""+ ResourceBundleUtil.getMessage("theme.universal.switchMobile") +"\"></a></p></div>" + getPropertyString("subfooter"));
         } else {
             data.put("footer_inner_after", getPropertyString("subfooter"));
         }
